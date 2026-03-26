@@ -1,0 +1,55 @@
+export interface Employee {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  color?: string | null;
+}
+
+export interface Shift {
+  id: string;
+  name: string;
+  code?: string | null;
+  start_time: string; // HH:mm format
+  end_time: string; // HH:mm format
+  break_minutes: number;
+  store_id?: string | null;
+  is_global?: boolean;
+}
+
+export interface ShiftAssignment {
+  id: string;
+  employee_id: string;
+  date: string; // YYYY-MM-DD format
+  shift_id: string | null;
+  store_id: string | null;
+  assignment_type?: 'SHIFT' | 'FREI' | 'KRANK' | 'FERIEN';
+}
+
+export interface Vacation {
+  id: string;
+  employee_id: string;
+  start_date: string; // YYYY-MM-DD format
+  end_date: string; // YYYY-MM-DD format
+}
+
+export interface ShiftAssignmentWithDetails extends ShiftAssignment {
+  employee?: Employee;
+  shift?: Shift;
+  store?: Store;
+}
+
+export interface HoursCalculation {
+  employee_id: string;
+  employee_name: string;
+  normal_hours: number;
+  night_hours: number;
+  sunday_hours: number;
+  total_hours: number;
+  vacation_days: number;
+  sick_days: number;
+}

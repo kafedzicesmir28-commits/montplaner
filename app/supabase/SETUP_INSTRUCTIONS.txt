@@ -1,0 +1,32 @@
+================================================================================
+  QUICK SETUP GUIDE - COPY THIS SQL TO SUPABASE
+================================================================================
+
+STEP 1: Go to https://supabase.com and open your project
+
+STEP 2: Click "SQL Editor" in the left sidebar
+
+STEP 3: Click "New query" button
+
+STEP 4: Copy the ENTIRE contents of the file "schema.sql" (in this same folder)
+
+STEP 5: Paste into the SQL Editor
+
+STEP 6: Click "Run" button (or press Ctrl+Enter / Cmd+Enter)
+
+STEP 7: You should see "Success. No rows returned" message
+
+STEP 8: Verify tables exist:
+   - Click "Table Editor" in left sidebar
+   - You should see 5 tables: employees, stores, shifts, shift_assignments, vacations
+
+STEP 9: Create an admin user:
+   - Click "Authentication" → "Users"
+   - Click "Add user" → "Create new user"
+   - Enter email and password
+   - CHECK "Auto Confirm User"
+   - Click "Create user"
+
+STEP 10: Restart your Next.js dev server and try logging in!
+
+================================================================================

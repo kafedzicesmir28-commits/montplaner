@@ -1,0 +1,165 @@
+/* Montatsplaner — spreadsheet-only styling (light theme, no shadows/cards) */
+
+.root {
+  width: 100%;
+  background: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  color: #222;
+  overflow: auto;
+  max-height: calc(100vh - 120px);
+}
+
+.table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid #cfd6de;
+}
+
+.cell {
+  border: 1px solid #cfd6de;
+  padding: 4px;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.headerCell {
+  background: #dfe6ee;
+  font-weight: 600;
+  text-align: center;
+}
+
+.headerYear {
+  width: 220px;
+  height: 40px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.headerLabelSpacer {
+  width: 140px;
+  height: 80px;
+}
+
+.headerEmployee {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+  height: 80px;
+  padding: 0;
+  vertical-align: middle;
+  text-align: center;
+  position: relative;
+  overflow: visible;
+}
+
+.headerEmployeeInner {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100px;
+  height: 24px;
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  transform-origin: center center;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.monthCell {
+  width: 220px;
+  background: #ffffff;
+  padding: 0;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.monthLabel {
+  display: inline-block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 8px 4px;
+  max-height: 180px;
+}
+
+.labelCell {
+  width: 140px;
+  text-align: left;
+  font-weight: normal;
+  padding-left: 8px;
+}
+
+.rowGeleistete {
+  height: 32px;
+}
+
+.rowGeleistete td:not(.monthCell) {
+  background: #dfeedd;
+}
+
+.rowSecondary {
+  height: 28px;
+}
+
+.rowSecondary td:not(.monthCell) {
+  background: #e6edf7;
+}
+
+.rowBemerkung {
+  height: 32px;
+}
+
+.rowBemerkung td:not(.monthCell) {
+  background: #f4d6d6;
+}
+
+.dataCell {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cellInput {
+  width: 100%;
+  height: 100%;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.cellInputText {
+  text-align: left;
+  padding-left: 2px;
+}
+
+.bemerkungCell {
+  text-align: left;
+  padding-left: 6px;
+  font-weight: normal;
+}
+
+.totalMonthCell {
+  font-weight: 600;
+  text-align: left;
+  padding-left: 8px;
+  background: #ffffff;
+}

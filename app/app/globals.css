@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f9fb;
+  --surface: #ffffff;
+  --foreground: #111827;
+  --muted-foreground: #4b5563;
+  --border: #e5e7eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.4;
+}
+
+* {
+  border-color: var(--border);
+}
+
+a {
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  background: #fff;
+  color: #111827;
+  border-color: #d1d5db;
+}
+
+button {
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+table {
+  background: #fff;
+}
+
+th,
+td {
+  border-color: #e5e7eb;
+}
+
+.rounded-lg {
+  border-radius: 8px;
+}
+
+.shadow,
+.shadow-sm,
+.shadow-md {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .planner-print-area {
+    max-width: 100%;
+  }
+
+  .planner-print-area,
+  .planner-print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .planner-print-area table {
+    page-break-inside: auto;
+  }
+
+  .planner-print-area tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  @page {
+    margin: 12mm;
+    size: landscape;
+  }
+}

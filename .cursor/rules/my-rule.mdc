@@ -1,0 +1,12 @@
+---
+name: my-rule
+description: This is a new rule
+---
+
+# Overview
+
+Insert overview text here. The agent will only see this should they choose to apply the rule.
+
+Write all code using the latest NextJS version and follow best practices.
+Use dark theme for my app styling, follow the same styling across the app.
+Use Supabase MCP to control the database, and also use Publishable and secret API keys and never use Legacy anon, service_role API keys.
