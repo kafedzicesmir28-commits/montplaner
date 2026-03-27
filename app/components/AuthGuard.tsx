@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { t } from '@/lib/translations';
 
+function isInvalidRefreshTokenError(message: string | undefined): boolean {
+  const text = String(message || '').toLowerCase();
+  return text.includes('invalid refresh token') || text.includes('refresh token not found');
+}
+
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
@@ -12,10 +17,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error && isInvalidRefreshTokenError(error.message)) {
+        // Clear broken local auth state so future checks don't keep throwing.
+        await supabase.auth.signOut({ scope: 'local' });
+      }
+
       if (!session) {
-        router.push('/login');
+        setAuthenticated(false);
+        setLoading(false);
+        router.replace('/login');
         return;
       }
 
@@ -27,7 +42,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
-        router.push('/login');
+        setAuthenticated(false);
+        setLoading(false);
+        router.replace('/login');
       } else {
         setAuthenticated(true);
         setLoading(false);
