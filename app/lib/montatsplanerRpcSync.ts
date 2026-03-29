@@ -18,7 +18,7 @@ function rpcToMonthlyTotals(row: RpcHoursRow | null): Record<MetricField, number
     return { geleistete: 0, nacht: 0, sonntag: 0, krank: 0, ferien: 0 };
   }
   return {
-    geleistete: Number(row.total_hours ?? 0),
+    geleistete: Number(row.normal_hours ?? 0),
     nacht: Number(row.night_hours ?? 0),
     sonntag: Number(row.sunday_hours ?? 0),
     krank: Number(row.sick_days ?? 0),

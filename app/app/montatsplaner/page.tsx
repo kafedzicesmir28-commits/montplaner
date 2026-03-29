@@ -10,6 +10,21 @@ import { supabase } from '@/lib/supabaseClient';
 import { t } from '@/lib/translations';
 import { formatErrorMessage } from '@/lib/utils';
 
+const MONTH_OPTIONS = [
+  { key: 'januar', label: 'Januar' },
+  { key: 'februar', label: 'Februar' },
+  { key: 'märz', label: 'Marz' },
+  { key: 'april', label: 'April' },
+  { key: 'mai', label: 'Mai' },
+  { key: 'juni', label: 'Juni' },
+  { key: 'juli', label: 'Juli' },
+  { key: 'august', label: 'August' },
+  { key: 'september', label: 'September' },
+  { key: 'oktober', label: 'Oktober' },
+  { key: 'november', label: 'November' },
+  { key: 'dezember', label: 'Dezember' },
+] as const;
+
 function MontatsplanerExports({ employees }: { employees: HeaderEmployee[] }) {
   const { data } = usePlanner();
 
@@ -50,10 +65,19 @@ function MontatsplanerShell({
   onYearChange: (y: number) => void;
   employees: HeaderEmployee[];
 }) {
+  const [selectedMonth, setSelectedMonth] = useState<string>(MONTH_OPTIONS[0].key);
+
   const yearOptions = useMemo(() => {
-    const y = new Date().getFullYear();
-    return [y - 1, y, y + 1];
+    const fromYear = Math.max(2024, new Date().getFullYear() - 2);
+    const out: number[] = [];
+    for (let y = fromYear; y <= 2040; y++) out.push(y);
+    return out;
   }, []);
+
+  useEffect(() => {
+    const el = document.getElementById(`montatsplaner-month-${selectedMonth}`);
+    el?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [selectedMonth, year]);
 
   return (
     <>
@@ -61,6 +85,20 @@ function MontatsplanerShell({
         <h1 className="text-xl font-semibold text-gray-900">{t.monthlyPlanner}</h1>
         <div className="flex flex-wrap items-center gap-4">
           <MontatsplanerExports employees={employees} />
+          <label className="flex items-center gap-2 text-sm text-gray-800">
+            <span>Monat</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="border border-gray-300 bg-white px-2 py-1 text-gray-900"
+            >
+              {MONTH_OPTIONS.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex items-center gap-2 text-sm text-gray-800">
             <span>Jahr</span>
             <select

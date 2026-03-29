@@ -2,6 +2,12 @@ export interface Employee {
   id: string;
   name: string;
   created_at: string;
+  employment_start_date?: string | null;
+  birth_date?: string | null;
+  is_active?: boolean;
+  sort_order?: number | null;
+  /** Optional; used for estimated cost in reports (same unit as UI currency). */
+  hourly_rate?: number | null;
 }
 
 export interface Store {

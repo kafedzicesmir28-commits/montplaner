@@ -1,5 +1,28 @@
 import { Shift, ShiftAssignment } from '@/types/database';
 
+export type HourBuckets = {
+  totalHours: number;
+  effectiveHours: number;
+  nightHours: number;
+  sundayHours: number;
+};
+
+function toMinuteOfDay(value: string): number {
+  const [h, m] = value.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function normalizeShiftWindow(startTime: string, endTime: string): { start: number; end: number } {
+  const start = toMinuteOfDay(startTime);
+  let end = toMinuteOfDay(endTime);
+  if (end <= start) end += 24 * 60;
+  return { start, end };
+}
+
+function isNightMinute(minuteOfDay: number): boolean {
+  return minuteOfDay >= 20 * 60 || minuteOfDay < 6 * 60;
+}
+
 /**
  * Calculate hours between two times, accounting for overnight shifts
  */
@@ -21,6 +44,56 @@ export function calculateHours(
 
   const totalMinutes = endMinutes - startMinutes - breakMinutes;
   return Math.max(0, totalMinutes / 60);
+}
+
+/**
+ * Split shift duration into business buckets:
+ * - effectiveHours: excludes night and Sunday minutes
+ * - nightHours: night premium bucket (20:00-06:00)
+ * - sundayHours: Sunday premium bucket
+ * Break minutes are deducted proportionally across all buckets.
+ */
+export function calculateHourBuckets(
+  startTime: string,
+  endTime: string,
+  breakMinutes: number = 0,
+  date?: string
+): HourBuckets {
+  const { start, end } = normalizeShiftWindow(startTime, endTime);
+  const rawMinutes = Math.max(0, end - start);
+  if (rawMinutes === 0) {
+    return { totalHours: 0, effectiveHours: 0, nightHours: 0, sundayHours: 0 };
+  }
+
+  const anchor = date ? new Date(`${date}T00:00:00`) : null;
+  let nightMinutes = 0;
+  let sundayMinutes = 0;
+  let effectiveMinutes = 0;
+
+  for (let minute = start; minute < end; minute++) {
+    const minuteOfDay = minute % (24 * 60);
+    const dayOffset = Math.floor(minute / (24 * 60));
+    const dayOfWeek = anchor ? new Date(anchor.getTime() + dayOffset * 86400000).getDay() : null;
+    const sunday = dayOfWeek === 0;
+
+    if (sunday) {
+      sundayMinutes++;
+    } else if (isNightMinute(minuteOfDay)) {
+      nightMinutes++;
+    } else {
+      effectiveMinutes++;
+    }
+  }
+
+  const deduct = Math.min(Math.max(0, Math.floor(breakMinutes)), rawMinutes);
+  const factor = (rawMinutes - deduct) / rawMinutes;
+
+  return {
+    totalHours: (rawMinutes - deduct) / 60,
+    effectiveHours: (effectiveMinutes * factor) / 60,
+    nightHours: (nightMinutes * factor) / 60,
+    sundayHours: (sundayMinutes * factor) / 60,
+  };
 }
 
 /**
@@ -83,7 +156,35 @@ export function isSunday(date: string): boolean {
  * Format date to YYYY-MM-DD
  */
 export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function parseYmdLocal(ymd: string): Date {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function firstOfMonthFromDate(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/** First-of-month strings YYYY-MM-01 from start through end (inclusive), by calendar month. */
+export function monthsFirstOfMonthInRange(startYmd: string, endYmd: string): string[] {
+  const start = firstOfMonthFromDate(parseYmdLocal(startYmd));
+  const end = firstOfMonthFromDate(parseYmdLocal(endYmd));
+  if (end < start) return [];
+  const out: string[] = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    out.push(`${y}-${m}-01`);
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return out;
 }
 
 /**

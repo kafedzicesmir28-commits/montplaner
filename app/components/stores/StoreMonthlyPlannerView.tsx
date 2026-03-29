@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store, Vacation } from '@/types/database';
 import { formatDate, formatErrorMessage, getDaysInMonth } from '@/lib/utils';
 import { t } from '@/lib/translations';
+import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type StoreRow = Store & { color?: string | null };
 type PlannerAssignmentRow = ShiftAssignment & {
@@ -14,22 +15,9 @@ type PlannerAssignmentRow = ShiftAssignment & {
   custom_end_time?: string | null;
 };
 
-function parseHexColor(value: string | null | undefined): string | null {
-  if (value == null || typeof value !== 'string') return null;
-  const v = value.trim();
-  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
-  return null;
-}
-
 function headerStyle(color: string | null | undefined): { backgroundColor: string; color: string } {
-  const bg = parseHexColor(color) ?? '#e7e6e6';
-  const hex = bg.replace('#', '');
-  const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return { backgroundColor: bg, color: luminance > 0.65 ? '#111827' : '#f9fafb' };
+  const bg = resolveStoreColor(color);
+  return { backgroundColor: bg, color: storeTextColor(bg) };
 }
 
 export default function StoreMonthlyPlannerView({ storeId }: { storeId: string }) {

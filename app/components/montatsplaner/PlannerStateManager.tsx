@@ -145,6 +145,13 @@ export function PlannerStateManager({ year, employeeIds, children }: Props) {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [syncFromPlannerRpc]);
 
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void syncFromPlannerRpc();
+    }, 60000);
+    return () => window.clearInterval(id);
+  }, [syncFromPlannerRpc]);
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);

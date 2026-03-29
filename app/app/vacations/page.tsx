@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
@@ -8,6 +8,86 @@ import { supabase } from '@/lib/supabaseClient';
 import { Vacation, Employee } from '@/types/database';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
 import { t } from '@/lib/translations';
+
+type WeeklyVacationRow = {
+  weekLabel: string;
+  weekKey: string;
+  employeeName: string;
+  vacationDays: number;
+};
+type WeekCell = {
+  weekNumber: number;
+  start: Date;
+  end: Date;
+  monthIndex: number;
+};
+
+function toDateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00`);
+}
+
+function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function eachDay(start: string, end: string): string[] {
+  const out: string[] = [];
+  const s = toDateOnly(start);
+  const e = toDateOnly(end);
+  for (let cur = new Date(s); cur <= e; cur.setDate(cur.getDate() + 1)) {
+    out.push(dayKey(cur));
+  }
+  return out;
+}
+
+function isoWeek(dateStr: string): { label: string; key: string } {
+  const d = toDateOnly(dateStr);
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() + 3 - ((x.getDay() + 6) % 7));
+  const week1 = new Date(x.getFullYear(), 0, 4);
+  const n =
+    1 +
+    Math.round(((x.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  const y = x.getFullYear();
+  return { label: `KW ${n}/${y}`, key: `${y}-${String(n).padStart(2, '0')}` };
+}
+
+function isoWeekFromDate(date: Date): { week: number; weekYear: number } {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  const week =
+    1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return { week, weekYear: d.getFullYear() };
+}
+
+function mondayOfIsoWeek(year: number, week: number): Date {
+  const simple = new Date(year, 0, 1 + (week - 1) * 7);
+  const dow = simple.getDay();
+  const monday = new Date(simple);
+  if (dow <= 4) monday.setDate(simple.getDate() - simple.getDay() + 1);
+  else monday.setDate(simple.getDate() + 8 - simple.getDay());
+  return monday;
+}
+
+function buildYearWeeks(year: number): WeekCell[] {
+  const out: WeekCell[] = [];
+  for (let week = 1; week <= 53; week++) {
+    const start = mondayOfIsoWeek(year, week);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const check = isoWeekFromDate(start);
+    if (check.weekYear !== year || check.week !== week) continue;
+    out.push({ weekNumber: week, start, end, monthIndex: start.getMonth() });
+  }
+  return out;
+}
+
+function intersects(startA: Date, endA: Date, startB: Date, endB: Date): boolean {
+  return startA <= endB && endA >= startB;
+}
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 export default function VacationsPage() {
   const [vacations, setVacations] = useState<(Vacation & { employee?: Employee })[]>([]);
@@ -18,6 +98,8 @@ export default function VacationsPage() {
   const [employeeId, setEmployeeId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
     fetchData();
@@ -64,6 +146,24 @@ export default function VacationsPage() {
     }
 
     try {
+      const overlapCheck = await supabase
+        .from('vacations')
+        .select('id, employee_id, start_date, end_date')
+        .lte('start_date', endDate)
+        .gte('end_date', startDate);
+      if (overlapCheck.error) throw overlapCheck.error;
+      const overlaps = (overlapCheck.data || []).filter((v) => {
+        if (editingVacation && v.id === editingVacation.id) return false;
+        return v.employee_id !== employeeId;
+      });
+      if (overlaps.length > 0) {
+        setOverlapWarning(
+          `Warnung: ${overlaps.length} bestehende Urlaubsantrag(e) uberlappen mit diesem Zeitraum.`
+        );
+      } else {
+        setOverlapWarning(null);
+      }
+
       if (editingVacation) {
         const { error } = await supabase
           .from('vacations')
@@ -131,28 +231,182 @@ export default function VacationsPage() {
     resetForm();
   };
 
-  if (loading) {
-    return (
-      <AuthGuard>
-        <Layout>
-          <div className="text-center">{t.loading}</div>
-        </Layout>
-      </AuthGuard>
-    );
-  }
+  const overlapDays = vacations.reduce<Record<string, Set<string>>>((acc, vacation) => {
+    const emp = vacation.employee?.name || 'Unknown';
+    for (const d of eachDay(vacation.start_date, vacation.end_date)) {
+      if (!acc[d]) acc[d] = new Set<string>();
+      acc[d]!.add(emp);
+    }
+    return acc;
+  }, {});
+
+  const heavyOverlapDays = Object.entries(overlapDays)
+    .filter(([, names]) => names.size > 1)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  const weeklyOverview: WeeklyVacationRow[] = (() => {
+    const byWeekEmp = new Map<string, WeeklyVacationRow>();
+    for (const v of vacations) {
+      const name = v.employee?.name || 'Unknown';
+      for (const d of eachDay(v.start_date, v.end_date)) {
+        const wk = isoWeek(d);
+        const k = `${wk.key}:${name}`;
+        const prev = byWeekEmp.get(k);
+        if (prev) {
+          prev.vacationDays += 1;
+        } else {
+          byWeekEmp.set(k, { weekLabel: wk.label, weekKey: wk.key, employeeName: name, vacationDays: 1 });
+        }
+      }
+    }
+    return Array.from(byWeekEmp.values()).sort((a, b) => {
+      return a.weekKey.localeCompare(b.weekKey) || a.employeeName.localeCompare(b.employeeName);
+    });
+  })();
+
+  const yearStart = `${selectedYear}-01-01`;
+  const yearEnd = `${selectedYear}-12-31`;
+  const weeks = useMemo(() => buildYearWeeks(selectedYear), [selectedYear]);
+  const monthSpans = useMemo(() => {
+    const spans: { monthIndex: number; count: number }[] = [];
+    for (const w of weeks) {
+      const last = spans[spans.length - 1];
+      if (!last || last.monthIndex !== w.monthIndex) spans.push({ monthIndex: w.monthIndex, count: 1 });
+      else last.count += 1;
+    }
+    return spans;
+  }, [weeks]);
+  const vacationsForYear = useMemo(
+    () => vacations.filter((v) => v.start_date <= yearEnd && v.end_date >= yearStart),
+    [vacations, yearEnd, yearStart]
+  );
+  const vacationsByEmployee = useMemo(() => {
+    const map = new Map<string, Vacation[]>();
+    for (const v of vacationsForYear) {
+      const list = map.get(v.employee_id) ?? [];
+      list.push(v);
+      map.set(v.employee_id, list);
+    }
+    return map;
+  }, [vacationsForYear]);
+  const yearOptions = useMemo(() => {
+    const out: number[] = [];
+    for (let y = new Date().getFullYear() - 1; y <= 2040; y++) out.push(y);
+    return out;
+  }, []);
 
   return (
     <AuthGuard>
       <Layout>
+        {loading ? (
+          <div className="text-center">{t.loading}</div>
+        ) : (
         <div className="space-y-6">
+          {overlapWarning ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              {overlapWarning}
+            </div>
+          ) : null}
+
+          {heavyOverlapDays.length > 0 ? (
+            <div className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800">
+              Mehrfach-Urlaub erkannt: {heavyOverlapDays.length} Tag(e) haben gleichzeitige Antrage.
+            </div>
+          ) : null}
+
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900">{t.vacationsTitle}</h1>
-            <button
-              onClick={() => setShowModal(true)}
-              className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            >
-              {t.addVacation}
-            </button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <span>Jahr</span>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="rounded border border-gray-300 bg-white px-2 py-1.5"
+                >
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                onClick={() => setShowModal(true)}
+                className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+              >
+                {t.addVacation}
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-auto rounded-lg border border-gray-300 bg-white shadow-sm">
+            <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800">
+              Ferienplan {selectedYear}
+            </div>
+            <table className="border-collapse text-xs">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="sticky left-0 z-20 border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold">
+                    Name
+                  </th>
+                  {monthSpans.map((m, idx) => (
+                    <th
+                      key={`${m.monthIndex}-${idx}`}
+                      colSpan={m.count}
+                      className="border border-gray-300 px-2 py-2 text-center font-semibold"
+                    >
+                      {MONTH_SHORT[m.monthIndex]}
+                    </th>
+                  ))}
+                </tr>
+                <tr className="bg-gray-50">
+                  <th className="sticky left-0 z-20 border border-gray-300 bg-gray-50 px-3 py-1 text-left font-semibold">
+                    Woche
+                  </th>
+                  {weeks.map((w) => (
+                    <th key={w.weekNumber} className="border border-gray-300 px-1 py-1 text-[10px] font-medium">
+                      {w.weekNumber}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map((emp, rowIdx) => {
+                  const empVac = vacationsByEmployee.get(emp.id) ?? [];
+                  return (
+                    <tr key={emp.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900">
+                        {emp.name}
+                      </td>
+                      {weeks.map((w) => {
+                        const vacDaysInWeek = empVac.reduce((sum, v) => {
+                          const s = toDateOnly(v.start_date);
+                          const e = toDateOnly(v.end_date);
+                          if (!intersects(s, e, w.start, w.end)) return sum;
+                          const start = s > w.start ? s : w.start;
+                          const end = e < w.end ? e : w.end;
+                          const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+                          return sum + Math.max(0, days);
+                        }, 0);
+                        const active = vacDaysInWeek > 0;
+                        return (
+                          <td
+                            key={`${emp.id}-${w.weekNumber}`}
+                            title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
+                            className={`h-6 min-w-6 border border-gray-300 text-center ${
+                              active ? 'bg-red-400/80 text-white' : ''
+                            }`}
+                          >
+                            {active ? vacDaysInWeek : ''}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
           <div className="rounded-lg bg-white shadow overflow-hidden">
@@ -217,6 +471,44 @@ export default function VacationsPage() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+            <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800">
+              Wochenubersicht aller Mitarbeiter (Urlaubstage pro Woche)
+            </div>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Woche
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.employee}
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Urlaubstage
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {weeklyOverview.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-4 text-center text-sm text-gray-500">
+                      Keine Urlaubseintrage vorhanden.
+                    </td>
+                  </tr>
+                ) : (
+                  weeklyOverview.map((row, idx) => (
+                    <tr key={`${row.weekLabel}-${row.employeeName}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-4 py-2 text-sm text-gray-700">{row.weekLabel}</td>
+                      <td className="px-4 py-2 text-sm font-medium text-gray-900">{row.employeeName}</td>
+                      <td className="px-4 py-2 text-right text-sm text-gray-700">{row.vacationDays}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -290,6 +582,7 @@ export default function VacationsPage() {
             </div>
           )}
         </div>
+        )}
       </Layout>
     </AuthGuard>
   );

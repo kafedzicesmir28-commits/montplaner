@@ -7,6 +7,7 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
 import { formatDate, formatErrorMessage } from '@/lib/utils';
+import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type StoreRow = Store & { color?: string | null };
 
@@ -17,29 +18,12 @@ type AssignmentRow = ShiftAssignment & {
   shift: Shift | null;
 };
 
-function parseHexColor(value: string | null | undefined): string | null {
-  if (value == null || typeof value !== 'string') return null;
-  const v = value.trim();
-  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
-  return null;
-}
-
-/** Header strip color: DB `stores.color`, else light neutral. */
 function resolveHeaderColor(store: StoreRow): string {
-  const fromDb = parseHexColor(store.color ?? undefined);
-  if (fromDb) return fromDb;
-  return '#e7e6e6';
+  return resolveStoreColor(store.color ?? undefined);
 }
 
 function contrastingText(bg: string): string {
-  const h = bg.replace(/^#/, '');
-  const expand = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
-  if (expand.length !== 6) return '#111827';
-  const r = parseInt(expand.slice(0, 2), 16);
-  const g = parseInt(expand.slice(2, 4), 16);
-  const b = parseInt(expand.slice(4, 6), 16);
-  const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return L > 0.65 ? '#111827' : '#fafafa';
+  return storeTextColor(bg);
 }
 
 function formatClock(value: string): string {

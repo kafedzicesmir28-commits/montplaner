@@ -9,6 +9,21 @@ import { Shift, Store } from '@/types/database';
 import { t } from '@/lib/translations';
 
 type ShiftRow = Shift & { store?: Store | null };
+type ShiftTemplate = {
+  label: string;
+  name: string;
+  code: string;
+  start: string;
+  end: string;
+  breakMinutes: 30 | 45 | 60;
+};
+
+const SHIFT_TEMPLATES: ShiftTemplate[] = [
+  { label: 'Fruhschicht 06:00-14:00', name: 'Fruhschicht', code: 'FS', start: '06:00', end: '14:00', breakMinutes: 30 },
+  { label: 'Tag 08:00-16:00', name: 'Tagdienst', code: 'TD', start: '08:00', end: '16:00', breakMinutes: 30 },
+  { label: 'Spatschicht 14:00-22:00', name: 'Spatschicht', code: 'SS', start: '14:00', end: '22:00', breakMinutes: 45 },
+  { label: 'Nachtschicht 22:00-06:00', name: 'Nachtschicht', code: 'NS', start: '22:00', end: '06:00', breakMinutes: 60 },
+];
 
 function normalizeTime24(value: string): string | null {
   const trimmed = String(value ?? '').trim();
@@ -31,7 +46,7 @@ export default function ShiftsPage() {
   const [code, setCode] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [breakMinutes, setBreakMinutes] = useState(0);
+  const [breakMinutes, setBreakMinutes] = useState(30);
   const [storeId, setStoreId] = useState('');
   const [isGlobal, setIsGlobal] = useState(false);
 
@@ -116,7 +131,7 @@ export default function ShiftsPage() {
     setCode('');
     setStartTime('');
     setEndTime('');
-    setBreakMinutes(0);
+    setBreakMinutes(30);
     setStoreId('');
     setIsGlobal(false);
   };
@@ -127,10 +142,18 @@ export default function ShiftsPage() {
     setCode(shift.code || '');
     setStartTime(normalizeTime24(shift.start_time) || shift.start_time);
     setEndTime(normalizeTime24(shift.end_time) || shift.end_time);
-    setBreakMinutes(shift.break_minutes);
+    setBreakMinutes([30, 45, 60].includes(Number(shift.break_minutes)) ? Number(shift.break_minutes) : 30);
     setStoreId(shift.store_id || '');
     setIsGlobal(Boolean(shift.is_global));
     setShowModal(true);
+  };
+
+  const applyTemplate = (tpl: ShiftTemplate) => {
+    setName((prev) => (prev.trim() ? prev : tpl.name));
+    setCode((prev) => (prev.trim() ? prev : tpl.code));
+    setStartTime(tpl.start);
+    setEndTime(tpl.end);
+    setBreakMinutes(tpl.breakMinutes);
   };
 
   const handleDelete = async (id: string) => {
@@ -277,6 +300,23 @@ export default function ShiftsPage() {
                   {editingShift ? t.editShift : t.addShift}
                 </h3>
                 <form onSubmit={handleSubmit}>
+                  {!editingShift ? (
+                    <div className="mb-4">
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Shift template</label>
+                      <div className="flex flex-wrap gap-2">
+                        {SHIFT_TEMPLATES.map((tpl) => (
+                          <button
+                            key={tpl.label}
+                            type="button"
+                            onClick={() => applyTemplate(tpl)}
+                            className="rounded-md border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                          >
+                            {tpl.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       {t.shiftName}
@@ -372,13 +412,15 @@ export default function ShiftsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       {t.breakMinutes}
                     </label>
-                    <input
-                      type="number"
-                      value={breakMinutes}
-                      onChange={(e) => setBreakMinutes(parseInt(e.target.value) || 0)}
-                      min="0"
+                    <select
+                      value={String(breakMinutes)}
+                      onChange={(e) => setBreakMinutes(parseInt(e.target.value, 10) || 0)}
                       className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      <option value="30">30</option>
+                      <option value="45">45</option>
+                      <option value="60">60</option>
+                    </select>
                   </div>
                   <div className="flex justify-end space-x-3">
                     <button

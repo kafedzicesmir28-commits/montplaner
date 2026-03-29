@@ -8,6 +8,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS employees (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
+  employment_start_date DATE,
+  birth_date DATE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER,
+  hourly_rate NUMERIC(12, 2),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -46,12 +51,32 @@ CREATE INDEX IF NOT EXISTS idx_shift_assignments_employee_date ON shift_assignme
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_date ON shift_assignments(date);
 CREATE INDEX IF NOT EXISTS idx_vacations_employee ON vacations(employee_id);
 CREATE INDEX IF NOT EXISTS idx_vacations_dates ON vacations(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_employees_sort_order ON employees(sort_order, name);
 
 -- Planner Phase 1: store colors + optional per-cell times (idempotent; fixes PGRST204 if missing)
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS color text;
 ALTER TABLE shift_assignments
   ADD COLUMN IF NOT EXISTS custom_start_time time,
   ADD COLUMN IF NOT EXISTS custom_end_time time;
+
+-- Employees Phase 2: HR details + active status + manual ordering
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS employment_start_date date,
+  ADD COLUMN IF NOT EXISTS birth_date date,
+  ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS sort_order integer;
+
+UPDATE employees
+SET sort_order = src.seq
+FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY name ASC) AS seq
+  FROM employees
+) AS src
+WHERE employees.id = src.id
+  AND employees.sort_order IS NULL;
+
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS hourly_rate numeric(12, 2);
 
 -- Step 4: Enable Row Level Security
 ALTER TABLE employees ENABLE ROW LEVEL SECURITY;

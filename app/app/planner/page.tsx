@@ -8,6 +8,7 @@ import { Employee, Store, Shift, ShiftAssignment, Vacation } from '@/types/datab
 import { getDaysInMonth, formatDate, getPrintWeekDays } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerGrid from '@/components/PlannerGrid';
+import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type PlannerAssignmentRow = ShiftAssignment & {
   store?: (Store & { color?: string | null }) | null;
@@ -254,10 +255,14 @@ export default function PlannerPage() {
                         e.dataTransfer.setData('application/x-planner-item', JSON.stringify({ kind: 'store', id: store.id }));
                         e.dataTransfer.effectAllowed = 'copyMove';
                       }}
-                      className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-800 hover:opacity-90"
-                      style={{ backgroundColor: store.color || '#f3f4f6' }}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-semibold hover:opacity-90"
+                      style={{
+                        backgroundColor: resolveStoreColor(store.color),
+                        color: storeTextColor(resolveStoreColor(store.color)),
+                      }}
                       title={`Drag ${store.name} to planner cell`}
                     >
+                      <span className="h-2 w-2 rounded-full bg-white/80" aria-hidden />
                       {store.name}
                     </button>
                   ))}

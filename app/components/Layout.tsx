@@ -34,9 +34,10 @@ export default function Layout({
   ];
 
   const reportItems = [
-    { href: '/reports/employee-monthly', label: 'Employee Monthly' },
-    { href: '/reports/employee-vacations', label: 'Employee Vacations' },
-    { href: '/stores', label: 'Store Overview' },
+    { href: '/reports', label: t.reportsHub },
+    { href: '/reports/stores', label: t.reportsStoreOverviewShort },
+    { href: '/reports/employee-monthly', label: t.reportsEmployeeMonthlyShort },
+    { href: '/reports/employee-vacations', label: t.reportsEmployeeVacationsShort },
   ];
 
   const isPlannerRoute =

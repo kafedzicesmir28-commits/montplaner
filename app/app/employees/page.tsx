@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
@@ -14,6 +14,11 @@ export default function EmployeesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [name, setName] = useState('');
+  const [employmentStartDate, setEmploymentStartDate] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [hourlyRate, setHourlyRate] = useState('');
+  const [savingOrder, setSavingOrder] = useState(false);
 
   useEffect(() => {
     fetchEmployees();
@@ -24,7 +29,8 @@ export default function EmployeesPage() {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .order('name');
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
 
       if (error) throw error;
       setEmployees(data || []);
@@ -40,9 +46,64 @@ export default function EmployeesPage() {
           '3. Copy and run the SQL from: app/supabase/schema.sql\n\n' +
           'Or visit /setup-check for detailed instructions.'
         );
+      } else if (error.message?.includes('sort_order') || error.message?.includes('employment_start_date')) {
+        alert(
+          'Employees schema is outdated.\n\n' +
+          'Please run: app/supabase/migration-employees-phase2.sql\n' +
+          'in Supabase SQL Editor to add new employee fields.'
+        );
+      } else if (error.message?.includes('hourly_rate')) {
+        alert(
+          'Employees table is missing hourly_rate.\n\n' +
+          'Please run: app/supabase/migration-employees-hourly-rate.sql\n' +
+          'in Supabase SQL Editor.'
+        );
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const normalizeDate = (dateValue: string) => (dateValue ? dateValue : null);
+
+  const parseHourlyRate = (): number | null => {
+    const raw = hourlyRate.trim();
+    if (!raw) return null;
+    const n = parseFloat(raw.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const buildPayload = (sortOrder?: number) => ({
+    name,
+    employment_start_date: normalizeDate(employmentStartDate),
+    birth_date: normalizeDate(birthDate),
+    is_active: isActive,
+    hourly_rate: parseHourlyRate(),
+    ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
+  });
+
+  const swapEmployeeOrder = async (currentIndex: number, targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= employees.length || savingOrder) return;
+
+    const reordered = [...employees];
+    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+
+    setEmployees(reordered);
+    setSavingOrder(true);
+
+    try {
+      const updates = reordered.map((employee, index) =>
+        supabase.from('employees').update({ sort_order: index + 1 }).eq('id', employee.id)
+      );
+
+      const results = await Promise.all(updates);
+      const failedUpdate = results.find((result) => result.error);
+      if (failedUpdate?.error) throw failedUpdate.error;
+    } catch (error: any) {
+      alert('Error: ' + error.message);
+      fetchEmployees();
+    } finally {
+      setSavingOrder(false);
     }
   };
 
@@ -52,14 +113,15 @@ export default function EmployeesPage() {
       if (editingEmployee) {
         const { error } = await supabase
           .from('employees')
-          .update({ name })
+          .update(buildPayload())
           .eq('id', editingEmployee.id);
 
         if (error) throw error;
       } else {
+        const nextSortOrder = employees.length + 1;
         const { error } = await supabase
           .from('employees')
-          .insert([{ name }]);
+          .insert([buildPayload(nextSortOrder)]);
 
         if (error) throw error;
       }
@@ -67,6 +129,10 @@ export default function EmployeesPage() {
       setShowModal(false);
       setEditingEmployee(null);
       setName('');
+      setEmploymentStartDate('');
+      setBirthDate('');
+      setIsActive(true);
+      setHourlyRate('');
       fetchEmployees();
     } catch (error: any) {
       alert('Error: ' + error.message);
@@ -76,6 +142,14 @@ export default function EmployeesPage() {
   const handleEdit = (employee: Employee) => {
     setEditingEmployee(employee);
     setName(employee.name);
+    setEmploymentStartDate(employee.employment_start_date || '');
+    setBirthDate(employee.birth_date || '');
+    setIsActive(employee.is_active ?? true);
+    setHourlyRate(
+      employee.hourly_rate != null && Number.isFinite(Number(employee.hourly_rate))
+        ? String(employee.hourly_rate)
+        : '',
+    );
     setShowModal(true);
   };
 
@@ -99,6 +173,20 @@ export default function EmployeesPage() {
     setShowModal(false);
     setEditingEmployee(null);
     setName('');
+    setEmploymentStartDate('');
+    setBirthDate('');
+    setIsActive(true);
+    setHourlyRate('');
+  };
+
+  const handleAddEmployee = () => {
+    setEditingEmployee(null);
+    setName('');
+    setEmploymentStartDate('');
+    setBirthDate('');
+    setIsActive(true);
+    setHourlyRate('');
+    setShowModal(true);
   };
 
   if (loading) {
@@ -118,43 +206,109 @@ export default function EmployeesPage() {
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900">{t.employeesTitle}</h1>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={handleAddEmployee}
               className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
             >
               {t.addEmployee}
             </button>
           </div>
 
-          <div className="rounded-lg bg-white shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+            <table className="min-w-full table-fixed divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[90px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.reorder}
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.employeeName}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[170px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.employmentStartDate}
+                  </th>
+                  <th className="w-[160px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.birthDate}
+                  </th>
+                  <th className="w-[140px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.status}
+                  </th>
+                  <th className="w-[120px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.hourlyRateLabel}
+                  </th>
+                  <th className="w-[150px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.created}
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="w-[130px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.actions}
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 bg-white">
                 {employees.map((employee, index) => (
                   <tr key={employee.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => swapEmployeeOrder(index, index - 1)}
+                          disabled={index === 0 || savingOrder}
+                          title={t.moveUp}
+                          aria-label={t.moveUp}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <ArrowUp size={15} />
+                        </button>
+                        <button
+                          onClick={() => swapEmployeeOrder(index, index + 1)}
+                          disabled={index === employees.length - 1 || savingOrder}
+                          title={t.moveDown}
+                          aria-label={t.moveDown}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <ArrowDown size={15} />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="truncate px-4 py-3 text-sm font-medium text-gray-900">
                       {employee.name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {employee.employment_start_date
+                        ? new Date(employee.employment_start_date).toLocaleDateString()
+                        : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {employee.birth_date ? new Date(employee.birth_date).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                          employee.is_active ?? true
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-gray-200 text-gray-700'
+                        }`}
+                      >
+                        {(employee.is_active ?? true) ? t.active : t.inactive}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-700">
+                      {employee.hourly_rate != null && Number.isFinite(Number(employee.hourly_rate))
+                        ? new Intl.NumberFormat('de-DE', {
+                            style: 'currency',
+                            currency: 'EUR',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(Number(employee.hourly_rate))
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
                       {new Date(employee.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-4 py-3 text-right text-sm font-medium">
                       <button
                         onClick={() => handleEdit(employee)}
                         title="Edit"
                         aria-label="Edit"
-                        className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                        className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                       >
                         <Pencil size={16} />
                       </button>
@@ -162,7 +316,7 @@ export default function EmployeesPage() {
                         onClick={() => handleDelete(employee.id)}
                         title="Delete"
                         aria-label="Delete"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-red-50 hover:text-red-700"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -192,6 +346,51 @@ export default function EmployeesPage() {
                       className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Employee name"
                     />
+                  </div>
+                  <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        {t.employmentStartDate}
+                      </label>
+                      <input
+                        type="date"
+                        value={employmentStartDate}
+                        onChange={(e) => setEmploymentStartDate(e.target.value)}
+                        className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">{t.birthDate}</label>
+                      <input
+                        type="date"
+                        value={birthDate}
+                        onChange={(e) => setBirthDate(e.target.value)}
+                        className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">{t.status}</label>
+                    <select
+                      value={isActive ? 'active' : 'inactive'}
+                      onChange={(e) => setIsActive(e.target.value === 'active')}
+                      className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="active">{t.active}</option>
+                      <option value="inactive">{t.inactive}</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">{t.hourlyRateLabel}</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={hourlyRate}
+                      onChange={(e) => setHourlyRate(e.target.value)}
+                      placeholder="z. B. 24,50"
+                      className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">{t.hourlyRateHint}</p>
                   </div>
                   <div className="flex justify-end space-x-3">
                     <button

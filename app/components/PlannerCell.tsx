@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { formatErrorMessage } from '@/lib/utils';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
 import { t } from '@/lib/translations';
+import { resolveStoreColor } from '@/lib/storeColors';
 
 export type PlannerAssignment = ShiftAssignment & {
   custom_start_time?: string | null;
@@ -21,17 +22,8 @@ const FREI_BG = '#d1d5db';
 const FREI_FG = '#1f2937';
 const EMPTY_BG = '#f9fafb';
 const EMPTY_FG = '#9ca3af';
-const DEFAULT_STORE_FALLBACK = '#f9fafb';
-
-function parseHexColor(value: string | null | undefined): string | null {
-  if (value == null || typeof value !== 'string') return null;
-  const v = value.trim();
-  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
-  return null;
-}
-
 function resolveStoreBackgroundColor(store: StoreForPlanner | undefined): string {
-  return store?.color || DEFAULT_STORE_FALLBACK;
+  return resolveStoreColor(store?.color);
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -199,7 +191,8 @@ export default function PlannerCell({
 
   const [shiftId, setShiftId] = useState(assignment?.shift_id ?? '');
   const [storeId, setStoreId] = useState(assignment?.store_id ?? '');
-  const [customRange, setCustomRange] = useState('');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingDroppedStoreId, setPendingDroppedStoreId] = useState<string | null>(null);
@@ -216,7 +209,8 @@ export default function PlannerCell({
     setShiftId(assignment?.shift_id ?? '');
     const nextStoreId = forceStoreId ?? pendingStoreId ?? pendingDroppedStoreId ?? assignment?.store_id ?? '';
     setStoreId(nextStoreId);
-    setCustomRange(formatCustomRangeFromDb(assignment?.custom_start_time, assignment?.custom_end_time));
+    setCustomStart(assignment?.custom_start_time ? formatClock(String(assignment.custom_start_time)) : '');
+    setCustomEnd(assignment?.custom_end_time ? formatClock(String(assignment.custom_end_time)) : '');
     setSaveError(null);
     if (pendingDroppedStoreId) setPendingDroppedStoreId(null);
   }, [isEditing, forceStoreId, pendingStoreId, pendingDroppedStoreId, assignment?.id, assignment?.shift_id, assignment?.store_id, assignment?.custom_start_time, assignment?.custom_end_time]);
@@ -253,37 +247,17 @@ export default function PlannerCell({
       return;
     }
 
-    const trimmedRange = customRange.trim();
-    let customPayload: { custom_start_time: string | null; custom_end_time: string | null };
-
-    if (trimmedRange === '') {
-      customPayload = { custom_start_time: null, custom_end_time: null };
-    } else {
-      const parsed = parseCustomRange(customRange);
-      if (parsed) {
-        const dbStart = toDbTime(parsed.start);
-        const dbEnd = toDbTime(parsed.end);
-        if (dbStart && dbEnd) {
-          customPayload = { custom_start_time: dbStart, custom_end_time: dbEnd };
-          const selShift = shifts.find((s) => s.id === shiftId);
-          if (selShift) {
-            const defS = toDbTime(formatClock(selShift.start_time));
-            const defE = toDbTime(formatClock(selShift.end_time));
-            if (defS && defE && defS === dbStart && defE === dbEnd) {
-              customPayload = { custom_start_time: null, custom_end_time: null };
-            }
-          }
-        } else {
-          customPayload = {
-            custom_start_time: assignment?.custom_start_time ?? null,
-            custom_end_time: assignment?.custom_end_time ?? null,
-          };
-        }
-      } else {
-        customPayload = {
-          custom_start_time: assignment?.custom_start_time ?? null,
-          custom_end_time: assignment?.custom_end_time ?? null,
-        };
+    let customPayload: { custom_start_time: string | null; custom_end_time: string | null } = {
+      custom_start_time: null,
+      custom_end_time: null,
+    };
+    const normalizedStart = normalizeHhMmPart(customStart);
+    const normalizedEnd = normalizeHhMmPart(customEnd);
+    if (normalizedStart && normalizedEnd) {
+      const dbStart = toDbTime(normalizedStart);
+      const dbEnd = toDbTime(normalizedEnd);
+      if (dbStart && dbEnd) {
+        customPayload = { custom_start_time: dbStart, custom_end_time: dbEnd };
       }
     }
 
@@ -328,7 +302,8 @@ export default function PlannerCell({
     shiftId,
     storeId,
     forceStoreId,
-    customRange,
+    customStart,
+    customEnd,
     shifts,
     availableShifts,
     employeeId,
@@ -357,7 +332,7 @@ export default function PlannerCell({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [shiftId, storeId, forceStoreId, customRange, isEditing, persist]);
+  }, [shiftId, storeId, forceStoreId, customStart, customEnd, isEditing, persist]);
 
   useEffect(() => {
     if (isEditing) return;
@@ -376,7 +351,8 @@ export default function PlannerCell({
       if (error) throw error;
       setShiftId('');
       setStoreId('');
-      setCustomRange('');
+      setCustomStart('');
+      setCustomEnd('');
       onStoreDrop?.(employeeId, dateStr, null);
       await onSaved();
       notifyPlannerAssignmentsChanged();
@@ -600,15 +576,18 @@ export default function PlannerCell({
                 </select>
               )}
               <input
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                spellCheck={false}
-                value={customRange}
-                onChange={(e) => setCustomRange(e.target.value)}
-                placeholder={shiftDefaultRangeLabel(shifts.find((s) => s.id === shiftId))}
-                className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900 placeholder:text-gray-500"
-                title="HH:mm – HH:mm (overrides shift template when set)"
+                type="time"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                title="Manual start time (optional)"
+              />
+              <input
+                type="time"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                title="Manual end time (optional)"
               />
             </>
           ) : null}

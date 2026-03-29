@@ -2,130 +2,164 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { formatErrorMessage } from '@/lib/utils';
-import type { Employee, Store, Vacation } from '@/types/database';
+import { formatErrorMessage, parseYmdLocal } from '@/lib/utils';
+import { t } from '@/lib/translations';
+import type { Employee, Vacation } from '@/types/database';
 
-type VacationRow = Vacation & {
-  store_id?: string | null;
-  notes?: string | null;
-  bemerkung?: string | null;
+const FILTER_ALL = '__all__';
+
+type VacationWithEmployee = Vacation & {
+  employee?: Employee | Employee[] | null;
 };
 
-function parseYmd(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y ?? 0, (m ?? 1) - 1, d ?? 1);
-}
-
 function vacationInclusiveDays(startDate: string, endDate: string): number {
-  const start = parseYmd(startDate);
-  const end = parseYmd(endDate);
+  const start = parseYmdLocal(startDate);
+  const end = parseYmdLocal(endDate);
   const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
   return diff + 1;
 }
 
-function isActiveToday(startDate: string, endDate: string): boolean {
+function formatDateDE(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return ymd;
+  return new Date(y, m - 1, d).toLocaleDateString('de-DE', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function absencePeriodLabel(startDate: string, endDate: string): string {
+  return `${formatDateDE(startDate)} – ${formatDateDE(endDate)}`;
+}
+
+type VacationPhase = 'current' | 'past' | 'upcoming';
+
+function vacationPhase(startDate: string, endDate: string): VacationPhase {
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const start = parseYmd(startDate);
-  const end = parseYmd(endDate);
-  return today >= start && today <= end;
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = parseYmdLocal(startDate);
+  const end = parseYmdLocal(endDate);
+  if (today0 > end) return 'past';
+  if (today0 < start) return 'upcoming';
+  return 'current';
+}
+
+function resolveEmployee(row: VacationWithEmployee): Employee | null {
+  const e = row.employee;
+  if (e == null) return null;
+  return Array.isArray(e) ? e[0] ?? null : e;
 }
 
 export default function EmployeeVacationReport() {
-  const [employeeId, setEmployeeId] = useState('');
+  const [filterEmployeeId, setFilterEmployeeId] = useState<string>(FILTER_ALL);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [storesById, setStoresById] = useState<Record<string, string>>({});
-  const [rows, setRows] = useState<VacationRow[]>([]);
+  const [rows, setRows] = useState<VacationWithEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const showEmployeeColumn = filterEmployeeId === FILTER_ALL;
+
   const selectedEmployee = useMemo(
-    () => employees.find((e) => e.id === employeeId) ?? null,
-    [employees, employeeId]
+    () => (filterEmployeeId === FILTER_ALL ? null : employees.find((e) => e.id === filterEmployeeId) ?? null),
+    [employees, filterEmployeeId],
   );
 
-  const loadInitial = useCallback(async () => {
+  const loadEmployees = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [empRes, storesRes] = await Promise.all([
-        supabase.from('employees').select('*').order('name', { ascending: true }),
-        supabase.from('stores').select('*').order('name', { ascending: true }),
-      ]);
-
-      if (empRes.error) throw empRes.error;
-      if (storesRes.error) throw storesRes.error;
-
-      const employeeList = (empRes.data || []) as Employee[];
-      setEmployees(employeeList);
-      setEmployeeId((prev) => prev || employeeList[0]?.id || '');
-
-      const map: Record<string, string> = {};
-      for (const s of (storesRes.data || []) as Store[]) {
-        map[s.id] = s.name;
-      }
-      setStoresById(map);
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setEmployees((data || []) as Employee[]);
     } catch (e: unknown) {
       setError(formatErrorMessage(e));
       setEmployees([]);
-      setStoresById({});
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const loadRows = useCallback(async () => {
-    if (!employeeId) {
-      setRows([]);
-      return;
-    }
+  const loadVacations = useCallback(async () => {
     setLoadingRows(true);
     setError(null);
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from('vacations')
-        .select('*')
-        .eq('employee_id', employeeId)
+        .select('*, employee:employees(*)')
         .order('start_date', { ascending: false });
 
+      if (filterEmployeeId !== FILTER_ALL) {
+        q = q.eq('employee_id', filterEmployeeId);
+      }
+
+      const { data, error } = await q;
       if (error) throw error;
-      setRows((data || []) as VacationRow[]);
+      setRows((data || []) as VacationWithEmployee[]);
     } catch (e: unknown) {
       setError(formatErrorMessage(e));
       setRows([]);
     } finally {
       setLoadingRows(false);
     }
-  }, [employeeId]);
+  }, [filterEmployeeId]);
 
   useEffect(() => {
-    void loadInitial();
-  }, [loadInitial]);
+    void loadEmployees();
+  }, [loadEmployees]);
 
   useEffect(() => {
     if (loading) return;
-    void loadRows();
-  }, [loading, loadRows]);
+    void loadVacations();
+  }, [loading, loadVacations]);
+
+  const totalCalendarDays = useMemo(
+    () => rows.reduce((sum, row) => sum + vacationInclusiveDays(row.start_date, row.end_date), 0),
+    [rows],
+  );
+
+  const statusBadge = (phase: VacationPhase) => {
+    const styles: Record<VacationPhase, string> = {
+      current: 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200',
+      upcoming: 'bg-sky-100 text-sky-900 ring-1 ring-sky-200',
+      past: 'bg-gray-100 text-gray-700 ring-1 ring-gray-200',
+    };
+    const labels: Record<VacationPhase, string> = {
+      current: t.vacationStatusCurrent,
+      upcoming: t.vacationStatusUpcoming,
+      past: t.vacationStatusPast,
+    };
+    return (
+      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[phase]}`}>
+        {labels[phase]}
+      </span>
+    );
+  };
+
+  const colCount = showEmployeeColumn ? 6 : 5;
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold text-gray-900">Employee Vacation Report</h1>
-        <p className="text-sm text-gray-600">Read-only vacation overview per employee.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">{t.employeeVacationReportTitle}</h1>
+        <p className="text-sm text-gray-600">{t.employeeVacationReportSubtitle}</p>
       </header>
 
-      <section className="max-w-md">
+      <section className="max-w-xl">
         <label className="space-y-1">
-          <span className="block text-xs font-semibold uppercase tracking-wide text-gray-600">
-            Employee
-          </span>
+          <span className="block text-xs font-semibold uppercase tracking-wide text-gray-600">{t.filterByEmployee}</span>
           <select
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
+            value={filterEmployeeId}
+            onChange={(e) => setFilterEmployeeId(e.target.value)}
             className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-            disabled={loading || employees.length === 0}
+            disabled={loading}
           >
+            <option value={FILTER_ALL}>{t.filterAllEmployees}</option>
             {employees.map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.name}
@@ -135,77 +169,91 @@ export default function EmployeeVacationReport() {
         </label>
         {selectedEmployee ? (
           <p className="mt-2 text-sm text-gray-600">
-            Selected: <span className="font-medium text-gray-900">{selectedEmployee.name}</span>
+            <span className="font-medium text-gray-900">{selectedEmployee.name}</span>
+            <span className="text-gray-500"> — {t.employeeVacationReportTitle}</span>
           </p>
-        ) : null}
+        ) : (
+          <p className="mt-2 text-sm text-gray-600">
+            <span className="font-medium text-gray-900">{t.filterAllEmployees}</span>
+            <span className="text-gray-500">
+              {' '}
+              · {rows.length} {t.vacationEntriesCount}
+            </span>
+          </p>
+        )}
       </section>
 
       {error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
-        </p>
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
       ) : null}
 
       <section className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                Vacation Start Date
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                Vacation End Date
-              </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
-                Total Days
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                Store
-              </th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
-                Notes
-              </th>
+              {showEmployeeColumn ? (
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">{t.employeeName}</th>
+              ) : null}
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">{t.absencePeriod}</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">{t.absenceFrom}</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">{t.absenceTo}</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">{t.calendarDays}</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">{t.status}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loadingRows ? (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-gray-500">
-                  Loading...
+                <td colSpan={colCount} className="px-3 py-6 text-center text-gray-500">
+                  {t.loading}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-gray-500">
-                  No vacation entries for selected employee.
+                <td colSpan={colCount} className="px-3 py-6 text-center text-gray-500">
+                  {t.noVacationEntries}
                 </td>
               </tr>
             ) : (
               rows.map((row) => {
-                const active = isActiveToday(row.start_date, row.end_date);
-                const notes = row.notes ?? row.bemerkung ?? '-';
-                const storeName = row.store_id ? storesById[row.store_id] ?? '-' : '-';
+                const emp = resolveEmployee(row);
+                const phase = vacationPhase(row.start_date, row.end_date);
+                const activeRow = phase === 'current';
                 return (
-                  <tr key={row.id} className={active ? 'bg-emerald-50' : ''}>
-                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-gray-900">
-                      {row.start_date}
+                  <tr key={row.id} className={activeRow ? 'bg-emerald-50/80' : undefined}>
+                    {showEmployeeColumn ? (
+                      <td className="px-3 py-2 font-medium text-gray-900">{emp?.name ?? '—'}</td>
+                    ) : null}
+                    <td className="max-w-[min(28rem,55vw)] px-3 py-2 text-gray-800">
+                      {absencePeriodLabel(row.start_date, row.end_date)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-gray-900">
-                      {row.end_date}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-gray-800">{formatDateDE(row.start_date)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-gray-800">{formatDateDE(row.end_date)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">
                       {vacationInclusiveDays(row.start_date, row.end_date)}
                     </td>
-                    <td className="px-3 py-2 text-gray-800">{storeName}</td>
-                    <td className="px-3 py-2 text-gray-800">{notes || '-'}</td>
+                    <td className="px-3 py-2">{statusBadge(phase)}</td>
                   </tr>
                 );
               })
             )}
           </tbody>
+          {rows.length > 0 && (
+            <tfoot className="border-t-2 border-gray-200 bg-gray-50">
+              <tr>
+                <td
+                  colSpan={showEmployeeColumn ? 4 : 3}
+                  className="px-3 py-3 text-sm font-semibold text-gray-800"
+                >
+                  {t.vacationTotalDaysListed}
+                </td>
+                <td className="px-3 py-3 text-right text-sm font-bold tabular-nums text-gray-900">{totalCalendarDays}</td>
+                <td className="px-3 py-3" />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </section>
     </div>
   );
 }
-

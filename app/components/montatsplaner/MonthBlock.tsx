@@ -36,7 +36,7 @@ export function MonthBlock({ monthLabel, monthKey, employees }: Props) {
   }, [data, monthKey, employees]);
 
   return (
-    <tbody>
+    <tbody id={`montatsplaner-month-${monthKey}`}>
       {ROW_DEF.map((row, rowIdx) => (
         <tr key={row.key} className={row.rowClass}>
           {rowIdx === 0 ? (

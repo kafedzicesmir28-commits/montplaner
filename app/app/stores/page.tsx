@@ -7,25 +7,9 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { Store } from '@/types/database';
 import { t } from '@/lib/translations';
+import { parseStoreHexColor, resolveStoreColor } from '@/lib/storeColors';
 
 type StoreRow = Store & { color?: string | null };
-
-function parseHexColor(value: string | null | undefined): string | null {
-  if (value == null || typeof value !== 'string') return null;
-  const v = value.trim();
-  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
-  return null;
-}
-
-function textColorForBg(bg: string): string {
-  const h = bg.replace('#', '');
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-  const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return L > 0.65 ? '#111827' : '#f9fafb';
-}
 
 export default function StoresPage() {
   const [stores, setStores] = useState<StoreRow[]>([]);
@@ -59,11 +43,10 @@ export default function StoresPage() {
   const cards = useMemo(
     () =>
       stores.map((store) => {
-        const accent = parseHexColor(store.color) ?? '#e7e6e6';
+        const accent = resolveStoreColor(store.color);
         return {
           ...store,
           accent,
-          text: textColorForBg(accent),
         };
       }),
     [stores]
@@ -75,7 +58,7 @@ export default function StoresPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const color = parseHexColor(newColor);
+      const color = parseStoreHexColor(newColor);
       const payload = color ? { name: newName.trim(), color } : { name: newName.trim(), color: null };
       const { error } = await supabase.from('stores').insert([payload]);
       if (error) throw error;
@@ -115,48 +98,61 @@ export default function StoresPage() {
             </button>
           </div>
 
-          {cards.length === 0 ? (
-            <div className="rounded border border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
-              No stores available.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {cards.map((store) => (
-                <Link
-                  key={store.id}
-                  href={`/stores/${store.id}`}
-                  className="group rounded-lg border border-gray-300 bg-white shadow-sm transition hover:shadow-md"
-                >
-                  <div
-                    className="h-3 w-full rounded-t-lg"
-                    style={{ backgroundColor: store.accent }}
-                    aria-hidden
-                  />
-                  <div className="space-y-2 px-4 py-4">
-                    <p className="text-sm font-semibold text-gray-900 group-hover:underline">
-                      {store.name}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-3 w-3 rounded-sm border border-gray-400"
-                        style={{ backgroundColor: store.accent }}
-                        aria-hidden
-                      />
-                      <span className="text-xs text-gray-600">
-                        {store.accent}
-                      </span>
-                    </div>
-                    <div
-                      className="inline-flex rounded px-2 py-0.5 text-[11px] font-semibold"
-                      style={{ backgroundColor: store.accent, color: store.text }}
-                    >
-                      Open monthly planner
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+            {cards.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-600">{t.noStoresAvailable}</div>
+            ) : (
+              <table className="min-w-full table-fixed divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="w-[80px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                      {t.storeColor}
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                      {t.storeName}
+                    </th>
+                    <th className="w-[140px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                      Hex
+                    </th>
+                    <th className="w-[280px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                      {t.actions}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {cards.map((store, index) => (
+                    <tr key={store.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-4 py-3">
+                        <span
+                          className="inline-block h-5 w-5 rounded border border-gray-300 align-middle"
+                          style={{ backgroundColor: store.accent }}
+                          aria-label={t.storeColor}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{store.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{store.accent}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <Link
+                            href={`/stores/${store.id}`}
+                            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            {t.openPlanner}
+                          </Link>
+                          <Link
+                            href={`/reports/stores/${store.id}`}
+                            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            {t.openStoreReport}
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
 
           {showCreate ? (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4">
@@ -173,6 +169,7 @@ export default function StoresPage() {
                       className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
                       placeholder={t.storeName}
                     />
+                    <p className="mt-1 text-xs text-gray-500">{t.addStoreHint}</p>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Farbe</label>

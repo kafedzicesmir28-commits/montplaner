@@ -4,6 +4,9 @@
 -- which matches how supabase-js calls: { p_employee_id, p_month }.
 --
 -- RPC (unchanged in app): supabase.rpc('calculate_employee_hours', { p_employee_id, p_month })
+--
+-- Requires shift_assignments.custom_break_minutes (run migration-shift-assignments-custom-break.sql first).
+-- Error "column sa.custom_break_minutes does not exist" → add that column, then re-run this entire file.
 
 DROP FUNCTION IF EXISTS public.calculate_employee_hours(date, uuid);
 DROP FUNCTION IF EXISTS public.calculate_employee_hours(uuid, date);
@@ -29,10 +32,10 @@ DECLARE
   p_month date := ($1->>'p_month')::date;
   v_month_start date;
   v_month_end date;
-  v_normal numeric := 0;
+  v_effective numeric := 0;
   v_night numeric := 0;
   v_sunday numeric := 0;
-  v_total numeric := 0;
+  v_total_effective numeric := 0;
   v_vacation_days int := 0;
   v_sick_days int := 0;
   rec record;
@@ -46,10 +49,16 @@ DECLARE
   t timestamp;
   mins_from_midnight int;
   dur numeric;
-  night_frac numeric;
-  shift_hours numeric;
+  effective_minutes int;
+  sunday_minutes int;
+  scale_factor numeric;
+  effective_part numeric;
   night_part numeric;
-  is_sun boolean;
+  sunday_part numeric;
+  shift_effective numeric;
+  minute_ts timestamp;
+  minute_of_day int;
+  minute_is_sunday boolean;
 BEGIN
   IF p_employee_id IS NULL OR p_month IS NULL THEN
     RAISE EXCEPTION 'p_employee_id and p_month are required';
@@ -93,7 +102,7 @@ BEGIN
       sa.custom_end_time,
       s.start_time AS st_start,
       s.end_time AS st_end,
-      COALESCE(s.break_minutes, 0)::int AS break_minutes,
+      COALESCE(sa.custom_break_minutes, s.break_minutes, 0)::int AS break_minutes,
       s.name AS shift_name
     FROM public.shift_assignments sa
     INNER JOIN public.shifts s ON s.id = sa.shift_id
@@ -115,46 +124,44 @@ BEGIN
     work_minutes := GREATEST(0, raw_minutes - rec.break_minutes);
 
     night_minutes := 0;
+    sunday_minutes := 0;
+    effective_minutes := 0;
     IF raw_minutes > 0 THEN
       t := d_start;
       WHILE t < d_end LOOP
-        mins_from_midnight :=
-          EXTRACT(HOUR FROM t)::int * 60 + EXTRACT(MINUTE FROM t)::int;
-        IF mins_from_midnight >= 20 * 60 OR mins_from_midnight < 6 * 60 THEN
+        minute_ts := t;
+        minute_of_day := EXTRACT(HOUR FROM minute_ts)::int * 60 + EXTRACT(MINUTE FROM minute_ts)::int;
+        minute_is_sunday := EXTRACT(ISODOW FROM minute_ts) = 7;
+        IF minute_is_sunday THEN
+          sunday_minutes := sunday_minutes + 1;
+        ELSIF minute_of_day >= 20 * 60 OR minute_of_day < 6 * 60 THEN
           night_minutes := night_minutes + 1;
+        ELSE
+          effective_minutes := effective_minutes + 1;
         END IF;
         t := t + interval '1 minute';
       END LOOP;
     END IF;
 
     dur := raw_minutes::numeric;
-    IF dur > 0 THEN
-      night_frac := night_minutes::numeric / dur;
-    ELSE
-      night_frac := 0;
-    END IF;
+    scale_factor := CASE WHEN dur > 0 THEN work_minutes::numeric / dur ELSE 0 END;
+    effective_part := (effective_minutes::numeric / 60.0) * scale_factor;
+    night_part := (night_minutes::numeric / 60.0) * scale_factor;
+    sunday_part := (sunday_minutes::numeric / 60.0) * scale_factor;
+    shift_effective := effective_part;
 
-    shift_hours := work_minutes::numeric / 60.0;
-    night_part := shift_hours * night_frac;
-
-    is_sun := EXTRACT(ISODOW FROM rec.adate::timestamp) = 7;
-
-    v_total := v_total + shift_hours;
+    v_total_effective := v_total_effective + shift_effective;
+    v_effective := v_effective + effective_part;
     v_night := v_night + night_part;
-
-    IF is_sun THEN
-      v_sunday := v_sunday + shift_hours;
-    ELSE
-      v_normal := v_normal + (shift_hours - night_part);
-    END IF;
+    v_sunday := v_sunday + sunday_part;
   END LOOP;
 
-  normal_hours := round(v_normal, 4);
+  normal_hours := round(v_effective, 4);
   night_hours := round(v_night, 4);
   sunday_hours := round(v_sunday, 4);
   vacation_days := v_vacation_days;
   sick_days := v_sick_days;
-  total_hours := round(v_total, 4);
+  total_hours := round(v_total_effective, 4);
   RETURN NEXT;
 END;
 $$;

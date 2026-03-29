@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Employee, Shift, Store, Vacation } from '@/types/database';
-import { calculateHours, formatDate, isDateInVacation } from '@/lib/utils';
+import { calculateHourBuckets, formatDate, isDateInVacation } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerCell, { type PlannerAssignment } from '@/components/PlannerCell';
 
@@ -210,7 +210,7 @@ export default function PlannerGrid({
     const end = assignment.custom_end_time
       ? String(assignment.custom_end_time).split(':').slice(0, 2).join(':')
       : shift.end_time;
-    return calculateHours(start, end, Number(shift.break_minutes ?? 0));
+    return calculateHourBuckets(start, end, Number(shift.break_minutes ?? 0), assignment.date).effectiveHours;
   };
 
   if (!storesLoaded) return null;
@@ -257,6 +257,15 @@ export default function PlannerGrid({
                         Total
                       </th>
                     ) : null}
+                    {printWeeklyTotals && si === weekSegments.length - 1 ? (
+                      <th
+                        scope="col"
+                        rowSpan={2}
+                        className="sticky top-0 z-20 border border-gray-200 bg-blue-50 px-1 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-blue-900"
+                      >
+                        Month
+                      </th>
+                    ) : null}
                   </Fragment>
                 ))}
               </tr>
@@ -299,7 +308,20 @@ export default function PlannerGrid({
                       employee.name
                     )}
                   </th>
-                  {weekSegments.flatMap((seg, si) => {
+                  {(() => {
+                    const employeeMonthTotal = weekSegments.reduce((sum, seg) => {
+                      return (
+                        sum +
+                        seg.days.reduce((segSum, day) => {
+                          const dateStr = formatDate(day);
+                          const assignment = assignmentByKey.get(`${employee.id}:${dateStr}`);
+                          const shift = assignment?.shift_id ? shiftById(shifts, assignment.shift_id) : undefined;
+                          return segSum + getHoursForCell(assignment, shift);
+                        }, 0)
+                      );
+                    }, 0);
+
+                    return weekSegments.flatMap((seg, si) => {
                     let weekTotal = 0;
                     const chunk = seg.days.map((day) => {
                       const dateStr = formatDate(day);
@@ -314,7 +336,8 @@ export default function PlannerGrid({
                         (assignment?.store_id ? storeMap.get(assignment.store_id) : undefined);
                       const shift = assignment?.shift_id ? shiftById(shifts, assignment.shift_id) : undefined;
                       if (!isVacation) {
-                        weekTotal += getHoursForCell(assignment, shift);
+                        const cellHours = getHoursForCell(assignment, shift);
+                        weekTotal += cellHours;
                       }
 
                       const cellKey = `${employee.id}:${dateStr}`;
@@ -359,8 +382,19 @@ export default function PlannerGrid({
                         </td>
                       );
                     }
+                    if (printWeeklyTotals && si === weekSegments.length - 1) {
+                      chunk.push(
+                        <td
+                          key={`${employee.id}-msum`}
+                          className="border border-gray-200 bg-blue-50 px-2 py-1 text-right text-[11px] font-bold tabular-nums text-blue-900"
+                        >
+                          {employeeMonthTotal.toFixed(1)}h
+                        </td>
+                      );
+                    }
                     return chunk;
-                  })}
+                  });
+                  })()}
                 </tr>
               ))}
             </tbody>

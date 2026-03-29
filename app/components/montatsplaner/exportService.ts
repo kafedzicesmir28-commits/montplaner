@@ -195,12 +195,15 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
   });
 
   const imgData = canvas.toDataURL('image/png');
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: 'a4' });
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
   const imgW = canvas.width;
   const imgH = canvas.height;
-  const ratio = Math.min(pageW / imgW, pageH / imgH) * 0.98;
+  const margin = 6;
+  const usableW = pageW - margin * 2;
+  const usableH = pageH - margin * 2;
+  const ratio = Math.min(usableW / imgW, usableH / imgH);
   const w = imgW * ratio;
   const h = imgH * ratio;
   const x = (pageW - w) / 2;
