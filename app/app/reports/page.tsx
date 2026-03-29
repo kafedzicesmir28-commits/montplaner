@@ -6,7 +6,13 @@ import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import { assignmentTotalWorkHours, paidWorkHoursFromRpcBuckets } from '@/lib/reportsAnalytics';
-import { formatDate, formatErrorMessage, monthsFirstOfMonthInRange, parseYmdLocal } from '@/lib/utils';
+import {
+  formatDate,
+  formatErrorMessage,
+  formatWorkHoursDisplay,
+  monthsFirstOfMonthInRange,
+  parseYmdLocal,
+} from '@/lib/utils';
 import { resolveStoreColor } from '@/lib/storeColors';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
 import { t } from '@/lib/translations';
@@ -33,10 +39,6 @@ function formatPeriodLabel(startYmd: string, endYmd: string): string {
 
 function formatCurrencyEUR(value: number): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
-}
-
-function formatHours(value: number): string {
-  return value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function monthLabel(yyyyMm: string): string {
@@ -329,11 +331,11 @@ export default function ReportsHubPage() {
                     <span className="text-xs font-semibold uppercase tracking-wide">{t.reportsTotalHoursAllStores}</span>
                   </div>
                   <p className="mt-3 text-2xl font-bold tabular-nums text-gray-900">
-                    {formatHours(totalAssignmentHours)} h
+                    {formatWorkHoursDisplay(totalAssignmentHours)}
                   </p>
                   {unassignedHours > 0 && (
                     <p className="mt-1 text-xs text-amber-700">
-                      {unassignedHours.toLocaleString('de-DE', { maximumFractionDigits: 2 })} h ohne Filiale
+                      {formatWorkHoursDisplay(unassignedHours)} ohne Filiale
                     </p>
                   )}
                 </div>
@@ -392,7 +394,7 @@ export default function ReportsHubPage() {
                               <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: dot }} />
                               {store.name}
                             </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-gray-800">{formatHours(hours)} h</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-gray-800">{formatWorkHoursDisplay(hours)}</td>
                             <td className="px-4 py-3 text-right tabular-nums text-gray-600">
                               {totalAssignmentHours > 0 ? `${pct.toFixed(1)} %` : '—'}
                             </td>
@@ -455,7 +457,7 @@ export default function ReportsHubPage() {
                             {r.rate != null ? formatCurrencyEUR(r.rate) : t.reportsNoRate}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums text-gray-800">
-                            {formatHours(r.paidHours)} h
+                            {formatWorkHoursDisplay(r.paidHours)}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums font-medium text-gray-900">
                             {r.cost != null ? formatCurrencyEUR(r.cost) : '—'}
@@ -500,7 +502,7 @@ export default function ReportsHubPage() {
                       {monthlyTable.map((m, i) => (
                         <tr key={m.monthKey} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="px-4 py-3 font-medium text-gray-900">{m.label}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-gray-800">{formatHours(m.hours)} h</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-gray-800">{formatWorkHoursDisplay(m.hours)}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-gray-800">{m.shiftRows}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-gray-800">
                             {m.estCost > 0 ? formatCurrencyEUR(m.estCost) : '—'}

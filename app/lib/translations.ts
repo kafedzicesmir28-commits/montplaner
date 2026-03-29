@@ -88,6 +88,10 @@ export const t = {
   ferie: 'Ferie',
   /** Planner grid cell when employee has vacation (vacations table) */
   plannerVacation: 'Ferie',
+  /** Short label before break minutes in planner cells (e.g. "P 30") */
+  plannerPauseAbbrev: 'P',
+  plannerBreakSelect: 'Pause',
+  plannerBreakNone: 'Keine',
 
   // Vacations
   vacationsTitle: 'Urlaub (Ferie)',

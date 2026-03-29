@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { calculateHourBuckets, formatDate, formatErrorMessage } from '@/lib/utils';
+import {
+  calculateHourBuckets,
+  effectiveBreakMinutes,
+  formatDate,
+  formatErrorMessage,
+  formatWorkHoursDisplay,
+} from '@/lib/utils';
 import { t } from '@/lib/translations';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
 
@@ -118,7 +124,7 @@ export default function EmployeeMonthlyReport() {
           const shift = a.shift!;
           const start = effectiveTime(shift.start_time, a.custom_start_time);
           const end = effectiveTime(shift.end_time, a.custom_end_time);
-          const buckets = calculateHourBuckets(start, end, Number(shift.break_minutes ?? 0), a.date);
+          const buckets = calculateHourBuckets(start, end, effectiveBreakMinutes(a, shift), a.date);
           const worked = buckets.totalHours;
 
           return {
@@ -186,7 +192,7 @@ export default function EmployeeMonthlyReport() {
         </p>
         <p className="mt-3 text-base font-semibold text-gray-900">
           {t.employeeMonthlyTotalWorkedHours}:{' '}
-          <span className="tabular-nums">{totalWorkedHours.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> h
+          <span className="tabular-nums">{formatWorkHoursDisplay(totalWorkedHours)}</span>
         </p>
         <p className="mt-1 text-sm text-gray-600">
           {t.employeeMonthlyShiftCount}: {totalShifts}
@@ -281,8 +287,7 @@ export default function EmployeeMonthlyReport() {
           <div className="text-left sm:text-right">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{t.employeeMonthlyTotalWorkedHours}</p>
             <p className="text-3xl font-bold tabular-nums tracking-tight text-gray-900">
-              {totalWorkedHours.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-              <span className="text-xl font-semibold text-gray-600">h</span>
+              {formatWorkHoursDisplay(totalWorkedHours)}
             </p>
             <p className="mt-1 text-sm text-gray-600">
               {t.employeeMonthlyShiftCount}: <span className="tabular-nums font-medium text-gray-900">{totalShifts}</span>
@@ -344,7 +349,7 @@ export default function EmployeeMonthlyReport() {
                   <td className="px-3 py-2 text-right tabular-nums text-gray-700">{row.startTime}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-gray-700">{row.endTime}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">
-                    {row.workedHours.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatWorkHoursDisplay(row.workedHours)}
                   </td>
                 </tr>
               ))
@@ -358,7 +363,7 @@ export default function EmployeeMonthlyReport() {
               <td colSpan={3} className="px-3 py-3 text-right text-sm font-semibold text-gray-900 print:py-2">
                 {t.employeeMonthlyTotalWorkedHours}:{' '}
                 <span className="tabular-nums text-base print:text-sm">
-                  {totalWorkedHours.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} h
+                  {formatWorkHoursDisplay(totalWorkedHours)}
                 </span>
               </td>
             </tr>

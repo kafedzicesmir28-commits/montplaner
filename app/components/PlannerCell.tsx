@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Shift, ShiftAssignment, Store } from '@/types/database';
 import { supabase } from '@/lib/supabaseClient';
-import { formatErrorMessage } from '@/lib/utils';
+import { effectiveBreakMinutes, formatErrorMessage } from '@/lib/utils';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
 import { t } from '@/lib/translations';
 import { resolveStoreColor } from '@/lib/storeColors';
@@ -12,6 +12,17 @@ export type PlannerAssignment = ShiftAssignment & {
   custom_start_time?: string | null;
   custom_end_time?: string | null;
 };
+
+const PLANNER_BREAK_OPTIONS = [0, 30, 45, 60] as const;
+
+function snapToPlannerBreakMinutes(raw: number): (typeof PLANNER_BREAK_OPTIONS)[number] {
+  const r = Math.max(0, Math.floor(Number(raw) || 0));
+  if ((PLANNER_BREAK_OPTIONS as readonly number[]).includes(r)) return r as (typeof PLANNER_BREAK_OPTIONS)[number];
+  if (r < 15) return 0;
+  if (r < 38) return 30;
+  if (r < 53) return 45;
+  return 60;
+}
 
 type StoreForPlanner = Pick<Store, 'id' | 'name'> & { color?: string | null };
 const VACATION_BG = '#bbf7d0';
@@ -158,6 +169,8 @@ export type PlannerCellProps = {
   readOnly?: boolean;
   onActivate: () => void;
   onSaved: () => void | Promise<void>;
+  /** Clears grid editing state after delete (avoids stuck editor on empty cell). */
+  onCloseCellEdit?: () => void;
 };
 
 export default function PlannerCell({
@@ -182,17 +195,22 @@ export default function PlannerCell({
   readOnly = false,
   onActivate,
   onSaved,
+  onCloseCellEdit,
 }: PlannerCellProps) {
   const code = shift?.code?.trim() || shift?.name?.trim() || '';
   const storeName = store?.name?.trim() || '';
   const timeLine = workingRange(assignment, shift);
+  const displayBreakMinutes = effectiveBreakMinutes(assignment, shift);
   const vacationText = vacationLabel ? 'Ferie' : 'Ferie';
   const assignmentType = assignment?.assignment_type ?? 'SHIFT';
+  const isAssignmentStatusOnly =
+    assignmentType === 'KRANK' || assignmentType === 'FREI' || assignmentType === 'FERIEN';
 
   const [shiftId, setShiftId] = useState(assignment?.shift_id ?? '');
   const [storeId, setStoreId] = useState(assignment?.store_id ?? '');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [breakMinutes, setBreakMinutes] = useState<(typeof PLANNER_BREAK_OPTIONS)[number]>(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingDroppedStoreId, setPendingDroppedStoreId] = useState<string | null>(null);
@@ -211,9 +229,22 @@ export default function PlannerCell({
     setStoreId(nextStoreId);
     setCustomStart(assignment?.custom_start_time ? formatClock(String(assignment.custom_start_time)) : '');
     setCustomEnd(assignment?.custom_end_time ? formatClock(String(assignment.custom_end_time)) : '');
+    setBreakMinutes(snapToPlannerBreakMinutes(effectiveBreakMinutes(assignment, shift)));
     setSaveError(null);
     if (pendingDroppedStoreId) setPendingDroppedStoreId(null);
-  }, [isEditing, forceStoreId, pendingStoreId, pendingDroppedStoreId, assignment?.id, assignment?.shift_id, assignment?.store_id, assignment?.custom_start_time, assignment?.custom_end_time]);
+  }, [
+    isEditing,
+    forceStoreId,
+    pendingStoreId,
+    pendingDroppedStoreId,
+    assignment?.id,
+    assignment?.shift_id,
+    assignment?.store_id,
+    assignment?.custom_start_time,
+    assignment?.custom_end_time,
+    assignment?.custom_break_minutes,
+    shift,
+  ]);
 
   useEffect(() => {
     if (!forceStoreId) return;
@@ -270,6 +301,7 @@ export default function PlannerCell({
           .update({
             shift_id: shiftId,
             store_id: effectiveStoreId,
+            custom_break_minutes: breakMinutes,
             ...customPayload,
           })
           .eq('id', assignment.id);
@@ -281,6 +313,7 @@ export default function PlannerCell({
             date: dateStr,
             shift_id: shiftId,
             store_id: effectiveStoreId,
+            custom_break_minutes: breakMinutes,
             ...customPayload,
           },
           { onConflict: 'employee_id,date' }
@@ -304,6 +337,7 @@ export default function PlannerCell({
     forceStoreId,
     customStart,
     customEnd,
+    breakMinutes,
     shifts,
     availableShifts,
     employeeId,
@@ -332,7 +366,7 @@ export default function PlannerCell({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [shiftId, storeId, forceStoreId, customStart, customEnd, isEditing, persist]);
+  }, [shiftId, storeId, forceStoreId, customStart, customEnd, breakMinutes, isEditing, persist]);
 
   useEffect(() => {
     if (isEditing) return;
@@ -353,9 +387,11 @@ export default function PlannerCell({
       setStoreId('');
       setCustomStart('');
       setCustomEnd('');
+      setBreakMinutes(0);
       onStoreDrop?.(employeeId, dateStr, null);
       await onSaved();
       notifyPlannerAssignmentsChanged();
+      onCloseCellEdit?.();
     } catch (err: unknown) {
       const msg = formatErrorMessage(err);
       setSaveError(msg);
@@ -472,7 +508,8 @@ export default function PlannerCell({
         border: `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
         minWidth: editorMinWidth ?? 96,
         maxWidth: isEditing ? 200 : 122,
-        height: 72,
+        minHeight: 72,
+        height: 'auto',
         verticalAlign: 'middle',
         position: 'relative',
         zIndex: isEditing ? 20 : undefined,
@@ -483,32 +520,92 @@ export default function PlannerCell({
             : undefined,
       }}
     >
-      {isVacation || assignmentType === 'FERIEN' ? (
-        <div className="p-1">
+      {isEditing && assignment && isAssignmentStatusOnly && !isVacation ? (
+        <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
+          <div
+            className="mb-1 flex min-h-[44px] items-center justify-center rounded-md px-1 py-2 text-center text-[11px] font-semibold leading-tight"
+            style={cardStyle}
+          >
+            {assignmentType === 'FERIEN' ? 'Ferie' : assignmentType === 'KRANK' ? 'KR' : 'Frei'}
+          </div>
+          {saveError ? <div className="mb-0.5 text-[8px] text-red-700">{saveError}</div> : null}
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={saving}
+            className="w-full rounded border border-red-300 bg-red-50 py-0.5 text-[8px] font-semibold text-red-800 hover:bg-red-100"
+          >
+            {t.deleteAssignment}
+          </button>
+        </div>
+      ) : isVacation || assignmentType === 'FERIEN' ? (
+        <div
+          className={`p-1 ${assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? 'group relative' : ''}`}
+        >
           <div
             className="flex h-[58px] items-center justify-center rounded-md text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             {assignmentType === 'FERIEN' ? 'Ferie' : vacationText}
           </div>
+          {assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={saving}
+              title={t.deleteAssignment}
+              aria-label={t.deleteAssignment}
+              className="absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/90 text-[12px] font-bold leading-none text-red-700 shadow-sm ring-1 ring-red-200 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       ) : assignmentType === 'KRANK' ? (
-        <div className="p-1">
+        <div
+          className={`p-1 ${assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? 'group relative' : ''}`}
+        >
           <div
             className="flex h-[58px] items-center justify-center rounded-md text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             KR
           </div>
+          {assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={saving}
+              title={t.deleteAssignment}
+              aria-label={t.deleteAssignment}
+              className="absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/90 text-[12px] font-bold leading-none text-red-700 shadow-sm ring-1 ring-red-200 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       ) : assignmentType === 'FREI' ? (
-        <div className="p-1">
+        <div
+          className={`p-1 ${assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? 'group relative' : ''}`}
+        >
           <div
             className="flex h-[58px] items-center justify-center rounded-md text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             Frei
           </div>
+          {assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={saving}
+              title={t.deleteAssignment}
+              aria-label={t.deleteAssignment}
+              className="absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/90 text-[12px] font-bold leading-none text-red-700 shadow-sm ring-1 ring-red-200 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       ) : isEditing ? (
         <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
@@ -530,7 +627,12 @@ export default function PlannerCell({
           )}
           <select
             value={shiftId}
-            onChange={(e) => setShiftId(e.target.value)}
+            onChange={(e) => {
+              const id = e.target.value;
+              setShiftId(id);
+              const s = shifts.find((x) => x.id === id);
+              setBreakMinutes(snapToPlannerBreakMinutes(s?.break_minutes ?? 0));
+            }}
             disabled={!selectedStoreId}
             className={`mb-0.5 w-full max-w-full rounded border bg-white text-gray-900 ${
               simplifiedShiftOnlyMode
@@ -589,7 +691,39 @@ export default function PlannerCell({
                 className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
                 title="Manual end time (optional)"
               />
+              <div className="mb-0.5">
+                <span className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">{t.plannerBreakSelect}</span>
+                <select
+                  value={String(breakMinutes)}
+                  onChange={(e) => setBreakMinutes(snapToPlannerBreakMinutes(Number(e.target.value)))}
+                  className="w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                  title={t.breakMinutes}
+                >
+                  {PLANNER_BREAK_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n === 0 ? t.plannerBreakNone : `${n} min`}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
+          ) : null}
+          {simplifiedShiftOnlyMode && shiftId ? (
+            <div className="mb-0.5">
+              <span className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">{t.plannerBreakSelect}</span>
+              <select
+                value={String(breakMinutes)}
+                onChange={(e) => setBreakMinutes(snapToPlannerBreakMinutes(Number(e.target.value)))}
+                className="w-full max-w-full rounded border border-blue-200 bg-white px-1.5 py-1 text-[10px] text-gray-900"
+                title={t.breakMinutes}
+              >
+                {PLANNER_BREAK_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n === 0 ? t.plannerBreakNone : `${n} min`}
+                  </option>
+                ))}
+              </select>
+            </div>
           ) : null}
           {simplifiedShiftOnlyMode ? (
             <div className="mt-0.5 text-[8px] text-gray-500">
@@ -609,9 +743,11 @@ export default function PlannerCell({
           {saveError ? <div className="mt-0.5 text-[8px] text-red-700">{saveError}</div> : null}
         </div>
       ) : assignment && shift ? (
-        <div className="p-1">
+        <div
+          className={`p-1 ${assignment?.id && !readOnly && !isUnavailable ? 'group relative' : ''}`}
+        >
           <div
-            className="flex h-[58px] flex-col items-center justify-center rounded-md px-1 text-center text-[11px] font-medium leading-snug"
+            className="flex min-h-[56px] flex-col items-center justify-center gap-0 rounded-md px-1 py-0.5 text-center text-[10px] font-medium leading-tight"
             style={cardStyle}
           >
             <div className="max-w-full truncate font-medium" title={storeName}>
@@ -621,7 +757,24 @@ export default function PlannerCell({
               {code || '—'}
             </div>
             <div className="mt-0.5 whitespace-nowrap font-medium tabular-nums">{timeLine || '—'}</div>
+            {displayBreakMinutes > 0 ? (
+              <div className="mt-0.5 text-xs tabular-nums opacity-70">
+                {t.plannerPauseAbbrev} {displayBreakMinutes}
+              </div>
+            ) : null}
           </div>
+          {assignment?.id && !readOnly && !isUnavailable ? (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={saving}
+              title={t.deleteAssignment}
+              aria-label={t.deleteAssignment}
+              className="absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/90 text-[12px] font-bold leading-none text-red-700 shadow-sm ring-1 ring-red-200 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       ) : isUnavailable ? (
         <div className="p-1">

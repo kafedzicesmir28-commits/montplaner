@@ -34,6 +34,8 @@ export interface ShiftAssignment {
   shift_id: string | null;
   store_id: string | null;
   assignment_type?: 'SHIFT' | 'FREI' | 'KRANK' | 'FERIEN';
+  /** Per-day break override (minutes). Null = use linked shift.break_minutes. */
+  custom_break_minutes?: number | null;
 }
 
 export interface Vacation {

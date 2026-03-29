@@ -6,7 +6,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import { assignmentTotalWorkHours } from '@/lib/reportsAnalytics';
-import { formatDate, formatErrorMessage, parseYmdLocal } from '@/lib/utils';
+import { formatDate, formatErrorMessage, formatWorkHoursDisplay, parseYmdLocal } from '@/lib/utils';
 import { resolveStoreColor } from '@/lib/storeColors';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
 import { t } from '@/lib/translations';
@@ -25,10 +25,6 @@ function formatPeriodLabel(startYmd: string, endYmd: string): string {
   const e = parseYmdLocal(endYmd);
   const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
   return `${s.toLocaleDateString('de-DE', opts)} – ${e.toLocaleDateString('de-DE', opts)}`;
-}
-
-function formatHours(value: number): string {
-  return value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function resolveEmployee(row: AssignRow): Employee | null {
@@ -194,7 +190,7 @@ export default function StoreOverviewPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                   {t.storeOverviewGrandTotalHours}
                 </p>
-                <p className="text-2xl font-bold tabular-nums text-gray-900">{formatHours(grandTotalHours)} h</p>
+                <p className="text-2xl font-bold tabular-nums text-gray-900">{formatWorkHoursDisplay(grandTotalHours)}</p>
               </section>
 
               <div className="space-y-6">
@@ -222,7 +218,7 @@ export default function StoreOverviewPage() {
                             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                               {t.storeOverviewHoursAtLocation}
                             </p>
-                            <p className="text-xl font-bold tabular-nums text-gray-900">{formatHours(totalHours)} h</p>
+                            <p className="text-xl font-bold tabular-nums text-gray-900">{formatWorkHoursDisplay(totalHours)}</p>
                           </div>
                           <Link
                             href={`/reports/stores/${store.id}`}
@@ -247,7 +243,7 @@ export default function StoreOverviewPage() {
                                 className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm first:rounded-t-lg last:rounded-b-lg odd:bg-gray-50/80"
                               >
                                 <span className="font-medium text-gray-900">{e.name}</span>
-                                <span className="tabular-nums text-gray-700">{formatHours(e.hours)} h</span>
+                                <span className="tabular-nums text-gray-700">{formatWorkHoursDisplay(e.hours)}</span>
                               </li>
                             ))}
                           </ul>

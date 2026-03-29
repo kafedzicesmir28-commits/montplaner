@@ -1,5 +1,5 @@
 import type { Shift } from '@/types/database';
-import { calculateHourBuckets } from '@/lib/utils';
+import { calculateHourBuckets, effectiveBreakMinutes } from '@/lib/utils';
 
 export type AssignmentForHours = {
   date: string;
@@ -7,6 +7,7 @@ export type AssignmentForHours = {
   store_id?: string | null;
   custom_start_time?: string | null;
   custom_end_time?: string | null;
+  custom_break_minutes?: number | null;
   shift?: Shift | null;
 };
 
@@ -28,7 +29,7 @@ export function assignmentTotalWorkHours(row: AssignmentForHours): number {
     ce != null && String(ce).trim() !== ''
       ? String(ce).split(':').slice(0, 2).join(':')
       : sh.end_time;
-  return calculateHourBuckets(start, end, sh.break_minutes ?? 0, row.date).totalHours;
+  return calculateHourBuckets(start, end, effectiveBreakMinutes(row, sh), row.date).totalHours;
 }
 
 /** Paid work hours from RPC row (normal + night + Sunday; aligns with Buchhalteransicht buckets). */

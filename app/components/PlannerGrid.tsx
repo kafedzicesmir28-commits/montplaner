@@ -3,7 +3,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Employee, Shift, Store, Vacation } from '@/types/database';
-import { calculateHourBuckets, formatDate, isDateInVacation } from '@/lib/utils';
+import {
+  calculateHourBuckets,
+  effectiveBreakMinutes,
+  formatDate,
+  formatWorkHoursDisplay,
+  isDateInVacation,
+} from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerCell, { type PlannerAssignment } from '@/components/PlannerCell';
 
@@ -82,6 +88,33 @@ function segmentDaysByISOWeek(days: Date[]): WeekSegment[] {
     }
   }
   return segments;
+}
+
+function getHoursForAssignment(assignment: AssignmentWithStore | undefined, shift: Shift | undefined): number {
+  if (assignment?.assignment_type && assignment.assignment_type !== 'SHIFT') return 0;
+  if (!assignment || !shift) return 0;
+  const start = assignment.custom_start_time
+    ? String(assignment.custom_start_time).split(':').slice(0, 2).join(':')
+    : shift.start_time;
+  const end = assignment.custom_end_time
+    ? String(assignment.custom_end_time).split(':').slice(0, 2).join(':')
+    : shift.end_time;
+  const brk = effectiveBreakMinutes(assignment, shift);
+  return calculateHourBuckets(start, end, brk, assignment.date).totalHours;
+}
+
+function calculateWeeklyHours(
+  employeeId: string,
+  weekDays: Date[],
+  assignmentByKey: Map<string, AssignmentWithStore>,
+  shifts: Shift[]
+): number {
+  return weekDays.reduce((total, day) => {
+    const dateStr = formatDate(day);
+    const assignment = assignmentByKey.get(`${employeeId}:${dateStr}`);
+    const shift = assignment?.shift_id ? shiftById(shifts, assignment.shift_id) : undefined;
+    return total + getHoursForAssignment(assignment, shift);
+  }, 0);
 }
 
 export default function PlannerGrid({
@@ -201,18 +234,6 @@ export default function PlannerGrid({
     };
   }, []);
 
-  const getHoursForCell = (assignment: AssignmentWithStore | undefined, shift: Shift | undefined): number => {
-    if (assignment?.assignment_type && assignment.assignment_type !== 'SHIFT') return 0;
-    if (!assignment || !shift) return 0;
-    const start = assignment.custom_start_time
-      ? String(assignment.custom_start_time).split(':').slice(0, 2).join(':')
-      : shift.start_time;
-    const end = assignment.custom_end_time
-      ? String(assignment.custom_end_time).split(':').slice(0, 2).join(':')
-      : shift.end_time;
-    return calculateHourBuckets(start, end, Number(shift.break_minutes ?? 0), assignment.date).effectiveHours;
-  };
-
   if (!storesLoaded) return null;
 
   return (
@@ -309,17 +330,10 @@ export default function PlannerGrid({
                     )}
                   </th>
                   {(() => {
-                    const employeeMonthTotal = weekSegments.reduce((sum, seg) => {
-                      return (
-                        sum +
-                        seg.days.reduce((segSum, day) => {
-                          const dateStr = formatDate(day);
-                          const assignment = assignmentByKey.get(`${employee.id}:${dateStr}`);
-                          const shift = assignment?.shift_id ? shiftById(shifts, assignment.shift_id) : undefined;
-                          return segSum + getHoursForCell(assignment, shift);
-                        }, 0)
-                      );
-                    }, 0);
+                    const employeeMonthTotal = weekSegments.reduce(
+                      (sum, seg) => sum + calculateWeeklyHours(employee.id, seg.days, assignmentByKey, shifts),
+                      0
+                    );
 
                     return weekSegments.flatMap((seg, si) => {
                     let weekTotal = 0;
@@ -335,10 +349,8 @@ export default function PlannerGrid({
                         resolvedRelationalStore ??
                         (assignment?.store_id ? storeMap.get(assignment.store_id) : undefined);
                       const shift = assignment?.shift_id ? shiftById(shifts, assignment.shift_id) : undefined;
-                      if (!isVacation) {
-                        const cellHours = getHoursForCell(assignment, shift);
-                        weekTotal += cellHours;
-                      }
+                      const cellHours = getHoursForAssignment(assignment, shift);
+                      weekTotal += cellHours;
 
                       const cellKey = `${employee.id}:${dateStr}`;
                       const isUnavailable = unavailableDayKeySet.has(cellKey);
@@ -368,6 +380,7 @@ export default function PlannerGrid({
                             if (!readOnly && !isVacation && !isUnavailable) setEditingKey(cellKey);
                           }}
                           onSaved={onAssignmentsUpdated}
+                          onCloseCellEdit={() => setEditingKey(null)}
                         />
                       );
                     });
@@ -378,7 +391,7 @@ export default function PlannerGrid({
                           key={`${employee.id}-wsum-${seg.weekYear}-${seg.weekNumber}-${si}`}
                           className="border border-gray-200 bg-gray-100 px-2 py-1 text-right text-[11px] font-semibold tabular-nums text-gray-800"
                         >
-                          {weekTotal.toFixed(1)}h
+                          {formatWorkHoursDisplay(weekTotal)}
                         </td>
                       );
                     }
@@ -388,7 +401,7 @@ export default function PlannerGrid({
                           key={`${employee.id}-msum`}
                           className="border border-gray-200 bg-blue-50 px-2 py-1 text-right text-[11px] font-bold tabular-nums text-blue-900"
                         >
-                          {employeeMonthTotal.toFixed(1)}h
+                          {formatWorkHoursDisplay(employeeMonthTotal)}
                         </td>
                       );
                     }

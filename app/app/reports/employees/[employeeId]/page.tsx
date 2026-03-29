@@ -6,7 +6,13 @@ import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store, Vacation } from '@/types/database';
-import { formatDate, formatErrorMessage, getDaysInMonth, isDateInVacation } from '@/lib/utils';
+import {
+  formatDate,
+  formatErrorMessage,
+  formatWorkHoursDisplay,
+  getDaysInMonth,
+  isDateInVacation,
+} from '@/lib/utils';
 
 type RpcRow = {
   normal_hours: number;
@@ -173,8 +179,6 @@ export default function EmployeeMonthlyReportPage() {
     return rows;
   }, [calendarDays, vacationOnDate, assignmentByDate]);
 
-  const fmtHours = (n: number) => n.toFixed(2);
-
   if (!employeeId) {
     return (
       <AuthGuard>
@@ -229,19 +233,19 @@ export default function EmployeeMonthlyReportPage() {
               <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-6">
                 <div>
                   <dt className="text-gray-500">Total hours</dt>
-                  <dd className="font-medium tabular-nums">{fmtHours(rpcTotals.total_hours)}</dd>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.total_hours)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Normal hours</dt>
-                  <dd className="font-medium tabular-nums">{fmtHours(rpcTotals.normal_hours)}</dd>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.normal_hours)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Night hours</dt>
-                  <dd className="font-medium tabular-nums">{fmtHours(rpcTotals.night_hours)}</dd>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.night_hours)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Sunday hours</dt>
-                  <dd className="font-medium tabular-nums">{fmtHours(rpcTotals.sunday_hours)}</dd>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.sunday_hours)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Vacation days</dt>
@@ -369,13 +373,13 @@ export default function EmployeeMonthlyReportPage() {
                         Month totals (RPC)
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                        {fmtHours(rpcTotals.total_hours)}
+                        {formatWorkHoursDisplay(rpcTotals.total_hours)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                        {fmtHours(rpcTotals.night_hours)}
+                        {formatWorkHoursDisplay(rpcTotals.night_hours)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                        {fmtHours(rpcTotals.sunday_hours)}
+                        {formatWorkHoursDisplay(rpcTotals.sunday_hours)}
                       </td>
                       <td className="px-3 py-2 text-gray-400">—</td>
                     </tr>

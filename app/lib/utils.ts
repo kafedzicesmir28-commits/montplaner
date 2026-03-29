@@ -1,5 +1,17 @@
 import { Shift, ShiftAssignment } from '@/types/database';
 
+/** Break minutes for worked-hours: assignment override, else shift template. */
+export function effectiveBreakMinutes(
+  assignment: Pick<ShiftAssignment, 'custom_break_minutes'> | null | undefined,
+  shift: Pick<Shift, 'break_minutes'> | null | undefined
+): number {
+  const o = assignment?.custom_break_minutes;
+  if (o != null && Number.isFinite(Number(o))) {
+    return Math.max(0, Math.floor(Number(o)));
+  }
+  return Math.max(0, Math.floor(Number(shift?.break_minutes ?? 0)));
+}
+
 export type HourBuckets = {
   totalHours: number;
   effectiveHours: number;
@@ -160,6 +172,20 @@ export function formatDate(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * Human-readable worked time for UI (e.g. planner totals, reports). Input is decimal hours; display is never "57.3h".
+ * Example: 57.5 → "57h 30min"
+ */
+export function formatWorkHoursDisplay(decimalHours: number): string {
+  if (!Number.isFinite(decimalHours) || decimalHours <= 0) {
+    return '0h 00min';
+  }
+  const totalMinutes = Math.round(decimalHours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}h ${String(m).padStart(2, '0')}min`;
 }
 
 export function parseYmdLocal(ymd: string): Date {
