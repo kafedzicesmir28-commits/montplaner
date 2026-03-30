@@ -15,7 +15,7 @@ type ShiftTemplate = {
   code: string;
   start: string;
   end: string;
-  breakMinutes: 30 | 45 | 60;
+  breakMinutes: 0 | 30 | 45 | 60;
 };
 
 const SHIFT_TEMPLATES: ShiftTemplate[] = [
@@ -142,7 +142,7 @@ export default function ShiftsPage() {
     setCode(shift.code || '');
     setStartTime(normalizeTime24(shift.start_time) || shift.start_time);
     setEndTime(normalizeTime24(shift.end_time) || shift.end_time);
-    setBreakMinutes([30, 45, 60].includes(Number(shift.break_minutes)) ? Number(shift.break_minutes) : 30);
+    setBreakMinutes([0, 30, 45, 60].includes(Number(shift.break_minutes)) ? Number(shift.break_minutes) : 30);
     setStoreId(shift.store_id || '');
     setIsGlobal(Boolean(shift.is_global));
     setShowModal(true);
@@ -417,6 +417,7 @@ export default function ShiftsPage() {
                       onChange={(e) => setBreakMinutes(parseInt(e.target.value, 10) || 0)}
                       className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
+                      <option value="0">0</option>
                       <option value="30">30</option>
                       <option value="45">45</option>
                       <option value="60">60</option>
