@@ -4,6 +4,7 @@ export interface Employee {
   created_at: string;
   employment_start_date?: string | null;
   birth_date?: string | null;
+  store_id?: string | null;
   is_active?: boolean;
   sort_order?: number | null;
   /** Optional; used for estimated cost in reports (same unit as UI currency). */

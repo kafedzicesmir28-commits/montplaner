@@ -5,11 +5,12 @@ import { ArrowDown, ArrowUp, Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
-import { Employee } from '@/types/database';
+import { Employee, Store } from '@/types/database';
 import { t } from '@/lib/translations';
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
@@ -18,10 +19,12 @@ export default function EmployeesPage() {
   const [birthDate, setBirthDate] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [hourlyRate, setHourlyRate] = useState('');
+  const [storeId, setStoreId] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
 
   useEffect(() => {
     fetchEmployees();
+    fetchStores();
   }, []);
 
   const fetchEmployees = async () => {
@@ -64,6 +67,20 @@ export default function EmployeesPage() {
     }
   };
 
+  const fetchStores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id,name')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setStores((data || []) as Store[]);
+    } catch (error: any) {
+      console.error('Error fetching stores:', error.message);
+      setStores([]);
+    }
+  };
+
   const normalizeDate = (dateValue: string) => (dateValue ? dateValue : null);
 
   const parseHourlyRate = (): number | null => {
@@ -77,6 +94,7 @@ export default function EmployeesPage() {
     name,
     employment_start_date: normalizeDate(employmentStartDate),
     birth_date: normalizeDate(birthDate),
+    store_id: storeId || null,
     is_active: isActive,
     hourly_rate: parseHourlyRate(),
     ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
@@ -133,6 +151,7 @@ export default function EmployeesPage() {
       setBirthDate('');
       setIsActive(true);
       setHourlyRate('');
+      setStoreId('');
       fetchEmployees();
     } catch (error: any) {
       alert('Error: ' + error.message);
@@ -150,6 +169,7 @@ export default function EmployeesPage() {
         ? String(employee.hourly_rate)
         : '',
     );
+    setStoreId(employee.store_id ?? '');
     setShowModal(true);
   };
 
@@ -177,6 +197,7 @@ export default function EmployeesPage() {
     setBirthDate('');
     setIsActive(true);
     setHourlyRate('');
+    setStoreId('');
   };
 
   const handleAddEmployee = () => {
@@ -186,6 +207,7 @@ export default function EmployeesPage() {
     setBirthDate('');
     setIsActive(true);
     setHourlyRate('');
+    setStoreId('');
     setShowModal(true);
   };
 
@@ -228,6 +250,9 @@ export default function EmployeesPage() {
                   </th>
                   <th className="w-[160px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.birthDate}
+                  </th>
+                  <th className="w-[190px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    {t.employeeStore}
                   </th>
                   <th className="w-[140px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.status}
@@ -278,6 +303,9 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {employee.birth_date ? new Date(employee.birth_date).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="truncate px-4 py-3 text-sm text-gray-700">
+                      {stores.find((s) => s.id === employee.store_id)?.name || t.unassignedStore}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -368,6 +396,21 @@ export default function EmployeesPage() {
                         className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                  </div>
+                  <div className="mb-4">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">{t.employeeStore}</label>
+                    <select
+                      value={storeId}
+                      onChange={(e) => setStoreId(e.target.value)}
+                      className="w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">{t.unassignedStore}</option>
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="mb-4">
                     <label className="mb-1 block text-sm font-medium text-gray-700">{t.status}</label>

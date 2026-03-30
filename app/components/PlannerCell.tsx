@@ -143,6 +143,11 @@ function shiftDefaultRangeLabel(shift: Shift | undefined): string {
   return `${formatClock(shift.start_time)} – ${formatClock(shift.end_time)}`;
 }
 
+function hhmmFromShiftTime(value: string | null | undefined): string {
+  if (!value) return '';
+  return String(value).split(':').slice(0, 2).join(':');
+}
+
 function shiftAllowedForStore(shift: Shift, storeId: string): boolean {
   return !Boolean(shift.is_global) && shift.store_id === storeId;
 }
@@ -167,6 +172,8 @@ export type PlannerCellProps = {
   onStatusDrop?: (employeeId: string, dateStr: string, statusType: 'FREI' | 'KRANK' | 'FERIEN') => void;
   isEditing: boolean;
   readOnly?: boolean;
+  /** Optional store-section row tint applied to the cell background only. */
+  rowBackgroundColor?: string;
   onActivate: () => void;
   onSaved: () => void | Promise<void>;
   /** Clears grid editing state after delete (avoids stuck editor on empty cell). */
@@ -193,6 +200,7 @@ export default function PlannerCell({
   onStatusDrop,
   isEditing,
   readOnly = false,
+  rowBackgroundColor,
   onActivate,
   onSaved,
   onCloseCellEdit,
@@ -227,8 +235,18 @@ export default function PlannerCell({
     setShiftId(assignment?.shift_id ?? '');
     const nextStoreId = forceStoreId ?? pendingStoreId ?? pendingDroppedStoreId ?? assignment?.store_id ?? '';
     setStoreId(nextStoreId);
-    setCustomStart(assignment?.custom_start_time ? formatClock(String(assignment.custom_start_time)) : '');
-    setCustomEnd(assignment?.custom_end_time ? formatClock(String(assignment.custom_end_time)) : '');
+    const assignmentHasCustomRange =
+      assignment?.custom_start_time != null &&
+      assignment?.custom_start_time !== '' &&
+      assignment?.custom_end_time != null &&
+      assignment?.custom_end_time !== '';
+    if (assignmentHasCustomRange) {
+      setCustomStart(formatClock(String(assignment?.custom_start_time)));
+      setCustomEnd(formatClock(String(assignment?.custom_end_time)));
+    } else {
+      setCustomStart(shift ? hhmmFromShiftTime(shift.start_time) : '');
+      setCustomEnd(shift ? hhmmFromShiftTime(shift.end_time) : '');
+    }
     setBreakMinutes(snapToPlannerBreakMinutes(effectiveBreakMinutes(assignment, shift)));
     setSaveError(null);
     if (pendingDroppedStoreId) setPendingDroppedStoreId(null);
@@ -285,10 +303,21 @@ export default function PlannerCell({
     const normalizedStart = normalizeHhMmPart(customStart);
     const normalizedEnd = normalizeHhMmPart(customEnd);
     if (normalizedStart && normalizedEnd) {
-      const dbStart = toDbTime(normalizedStart);
-      const dbEnd = toDbTime(normalizedEnd);
-      if (dbStart && dbEnd) {
-        customPayload = { custom_start_time: dbStart, custom_end_time: dbEnd };
+      const selectedShift = shifts.find((s) => s.id === shiftId);
+      const selectedDefaultStart = selectedShift ? hhmmFromShiftTime(selectedShift.start_time) : '';
+      const selectedDefaultEnd = selectedShift ? hhmmFromShiftTime(selectedShift.end_time) : '';
+      const matchesShiftDefaults =
+        selectedDefaultStart !== '' &&
+        selectedDefaultEnd !== '' &&
+        normalizedStart === selectedDefaultStart &&
+        normalizedEnd === selectedDefaultEnd;
+
+      if (!matchesShiftDefaults) {
+        const dbStart = toDbTime(normalizedStart);
+        const dbEnd = toDbTime(normalizedEnd);
+        if (dbStart && dbEnd) {
+          customPayload = { custom_start_time: dbStart, custom_end_time: dbEnd };
+        }
       }
     }
 
@@ -345,6 +374,65 @@ export default function PlannerCell({
     onSaved,
     isVacation,
     assignmentType,
+  ]);
+
+  const applyShiftQuick = useCallback(async (nextShiftId: string) => {
+    const effectiveStoreId = forceStoreId ?? storeId ?? pendingStoreId ?? assignment?.store_id ?? '';
+    if (!effectiveStoreId) return;
+    const selectedShift = availableShifts.find((s) => s.id === nextShiftId);
+    if (!selectedShift) return;
+
+    setSaving(true);
+    setSaveError(null);
+    setShiftId(nextShiftId);
+    setBreakMinutes(snapToPlannerBreakMinutes(selectedShift.break_minutes ?? 0));
+
+    try {
+      const payload = {
+        employee_id: employeeId,
+        date: dateStr,
+        shift_id: nextShiftId,
+        store_id: effectiveStoreId,
+        assignment_type: 'SHIFT' as const,
+        custom_start_time: null,
+        custom_end_time: null,
+        custom_break_minutes: snapToPlannerBreakMinutes(selectedShift.break_minutes ?? 0),
+      };
+
+      if (assignment) {
+        const { error } = await supabase
+          .from('shift_assignments')
+          .update(payload)
+          .eq('id', assignment.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('shift_assignments')
+          .upsert(payload, { onConflict: 'employee_id,date' });
+        if (error) throw error;
+      }
+
+      await onSaved();
+      notifyPlannerAssignmentsChanged();
+      dirtyRef.current = false;
+      onCloseCellEdit?.();
+    } catch (e: unknown) {
+      const msg = formatErrorMessage(e);
+      setSaveError(msg);
+      console.error('PlannerCell quick assign:', msg, e);
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    forceStoreId,
+    storeId,
+    pendingStoreId,
+    assignment,
+    availableShifts,
+    employeeId,
+    dateStr,
+    onSaved,
+    onCloseCellEdit,
   ]);
 
   useEffect(() => {
@@ -503,7 +591,7 @@ export default function PlannerCell({
           : 'cursor-pointer transition-colors hover:brightness-[0.98]'
       }`}
       style={{
-        backgroundColor: '#ffffff',
+        backgroundColor: rowBackgroundColor ?? '#ffffff',
         color: '#111827',
         border: `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
         minWidth: editorMinWidth ?? 96,
@@ -609,46 +697,58 @@ export default function PlannerCell({
         </div>
       ) : isEditing ? (
         <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
-          {simplifiedShiftOnlyMode ? (
-            <div className="mb-1 rounded border border-blue-200 bg-blue-50 px-1 py-1">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[8px] font-bold uppercase tracking-wide text-blue-800">Step 1: Select Shift</span>
-                {saving ? <span className="text-[8px] text-blue-700">…</span> : null}
-              </div>
-              <div className="mt-0.5 text-[8px] text-blue-700">
-                Store is set. Choose a shift to continue.
-              </div>
-            </div>
-          ) : (
+          {!simplifiedShiftOnlyMode ? (
             <div className="mb-0.5 flex items-center justify-between gap-0.5">
               <span className="text-[8px] font-bold uppercase opacity-80">{t.assignShift}</span>
               {saving ? <span className="text-[8px] opacity-80">…</span> : null}
             </div>
-          )}
-          <select
-            value={shiftId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setShiftId(id);
-              const s = shifts.find((x) => x.id === id);
-              setBreakMinutes(snapToPlannerBreakMinutes(s?.break_minutes ?? 0));
-            }}
-            disabled={!selectedStoreId}
-            className={`mb-0.5 w-full max-w-full rounded border bg-white text-gray-900 ${
-              simplifiedShiftOnlyMode
-                ? 'border-blue-300 px-1.5 py-1 text-[10px] font-medium focus:border-blue-500'
-                : 'border-gray-300 px-0.5 py-0.5 text-[9px]'
-            }`}
-          >
-            <option value="">
-              {selectedStoreId ? t.selectShift : 'Drop a store first'}
-            </option>
-            {availableShifts.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
+          ) : null}
+          {simplifiedShiftOnlyMode ? (
+            <div className="mb-0.5 space-y-0.5">
+              {availableShifts.length === 0 ? (
+                <div className="rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-[10px] text-blue-800">
+                  No shifts available for this store.
+                </div>
+              ) : (
+                availableShifts.map((s, idx) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      void applyShiftQuick(s.id);
+                    }}
+                    disabled={saving}
+                    autoFocus={idx === 0}
+                    className="w-full rounded border border-blue-200 bg-white px-1.5 py-1 text-left text-[10px] font-medium text-gray-900 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <div className="truncate">{s.name}</div>
+                    <div className="text-[9px] text-gray-600">{formatClock(s.start_time)} - {formatClock(s.end_time)}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
+            <select
+              value={shiftId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setShiftId(id);
+                const s = shifts.find((x) => x.id === id);
+                setBreakMinutes(snapToPlannerBreakMinutes(s?.break_minutes ?? 0));
+              }}
+              disabled={!selectedStoreId}
+              className="mb-0.5 w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+            >
+              <option value="">
+                {selectedStoreId ? t.selectShift : 'Drop a store first'}
               </option>
-            ))}
-          </select>
+              {availableShifts.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
           {!simplifiedShiftOnlyMode ? (
             <>
               {lockStoreSelection ? (
@@ -678,18 +778,32 @@ export default function PlannerCell({
                 </select>
               )}
               <input
-                type="time"
+                type="text"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
+                onBlur={(e) => {
+                  const normalized = normalizeHhMmPart(e.target.value);
+                  if (normalized) setCustomStart(normalized);
+                }}
+                inputMode="numeric"
+                placeholder="HH:mm"
+                maxLength={5}
                 className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
-                title="Manual start time (optional)"
+                title="Manual start time in 24h format (HH:mm)"
               />
               <input
-                type="time"
+                type="text"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
+                onBlur={(e) => {
+                  const normalized = normalizeHhMmPart(e.target.value);
+                  if (normalized) setCustomEnd(normalized);
+                }}
+                inputMode="numeric"
+                placeholder="HH:mm"
+                maxLength={5}
                 className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
-                title="Manual end time (optional)"
+                title="Manual end time in 24h format (HH:mm)"
               />
               <div className="mb-0.5">
                 <span className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">{t.plannerBreakSelect}</span>
@@ -707,28 +821,6 @@ export default function PlannerCell({
                 </select>
               </div>
             </>
-          ) : null}
-          {simplifiedShiftOnlyMode && shiftId ? (
-            <div className="mb-0.5">
-              <span className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">{t.plannerBreakSelect}</span>
-              <select
-                value={String(breakMinutes)}
-                onChange={(e) => setBreakMinutes(snapToPlannerBreakMinutes(Number(e.target.value)))}
-                className="w-full max-w-full rounded border border-blue-200 bg-white px-1.5 py-1 text-[10px] text-gray-900"
-                title={t.breakMinutes}
-              >
-                {PLANNER_BREAK_OPTIONS.map((n) => (
-                  <option key={n} value={n}>
-                    {n === 0 ? t.plannerBreakNone : `${n} min`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-          {simplifiedShiftOnlyMode ? (
-            <div className="mt-0.5 text-[8px] text-gray-500">
-              Other options unlock after this shift is saved.
-            </div>
           ) : null}
           {assignment ? (
             <button

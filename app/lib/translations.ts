@@ -52,6 +52,8 @@ export const t = {
   addStore: 'Filiale hinzufügen',
   editStore: 'Filiale bearbeiten',
   storeName: 'Name',
+  employeeStore: 'Filiale',
+  unassignedStore: 'Nicht zugewiesen',
   storeColor: 'Farbe',
   openPlanner: 'Planer offnen',
   openStoreReport: 'Store Report',

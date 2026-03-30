@@ -12,6 +12,7 @@ import {
 } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerCell, { type PlannerAssignment } from '@/components/PlannerCell';
+import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type StoreRow = Store & { color?: string | null };
 type AssignmentWithStore = PlannerAssignment & { store?: StoreRow | null };
@@ -74,6 +75,40 @@ type WeekSegment = {
   weekYear: number;
   days: Date[];
 };
+
+type EmployeeStoreGroup = {
+  key: string;
+  label: string;
+  rowBgColor: string;
+  headerBgColor: string;
+  headerTextColor: string;
+  employees: Employee[];
+};
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const h = hex.replace(/^#/, '');
+  if (h.length === 3) {
+    return {
+      r: parseInt(h[0]! + h[0]!, 16),
+      g: parseInt(h[1]! + h[1]!, 16),
+      b: parseInt(h[2]! + h[2]!, 16),
+    };
+  }
+  if (h.length === 6) {
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+    };
+  }
+  return null;
+}
+
+function tintHex(hex: string, alpha: number, fallback = '#f5f5f5'): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return fallback;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
 
 function segmentDaysByISOWeek(days: Date[]): WeekSegment[] {
   const segments: WeekSegment[] = [];
@@ -163,6 +198,59 @@ export default function PlannerGrid({
     () => new Set(unavailableDayKeys ?? []),
     [unavailableDayKeys]
   );
+  const employeeStoreGroups = useMemo<EmployeeStoreGroup[]>(() => {
+    const byName = (a: Employee, b: Employee) => a.name.localeCompare(b.name);
+    const toGroupPalette = (baseColor: string) => ({
+      rowBgColor: tintHex(baseColor, 0.16, '#f5f5f5'),
+      headerBgColor: tintHex(baseColor, 0.28, '#ececec'),
+      headerTextColor: storeTextColor(baseColor),
+    });
+    if (forceStoreId) {
+      const forcedLabel = storeMap.get(forceStoreId)?.name ?? t.employeeStore;
+      const baseColor = resolveStoreColor(storeMap.get(forceStoreId)?.color ?? '#f5f5f5');
+      return [
+        {
+          key: `store:${forceStoreId}`,
+          label: forcedLabel,
+          ...toGroupPalette(baseColor),
+          employees: [...employees].sort(byName),
+        },
+      ];
+    }
+
+    const grouped = new Map<string, Employee[]>();
+    for (const employee of employees) {
+      const storeId = employee.store_id ?? '';
+      if (!grouped.has(storeId)) grouped.set(storeId, []);
+      grouped.get(storeId)!.push(employee);
+    }
+    for (const group of grouped.values()) group.sort(byName);
+
+    const assignedStoreIds = stores
+      .map((s) => s.id)
+      .filter((storeId) => grouped.has(storeId) && (grouped.get(storeId)?.length ?? 0) > 0);
+
+    const out: EmployeeStoreGroup[] = assignedStoreIds.map((storeId) => {
+      const baseColor = resolveStoreColor(storeMap.get(storeId)?.color ?? '#f5f5f5');
+      return {
+        key: `store:${storeId}`,
+        label: storeMap.get(storeId)?.name ?? storeId,
+        ...toGroupPalette(baseColor),
+        employees: grouped.get(storeId)!,
+      };
+    });
+
+    const unassigned = grouped.get('') ?? [];
+    if (unassigned.length > 0) {
+      out.push({
+        key: 'store:unassigned',
+        label: t.unassignedStore,
+        ...toGroupPalette('#f5f5f5'),
+        employees: unassigned,
+      });
+    }
+    return out;
+  }, [employees, forceStoreId, storeMap, stores]);
 
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
@@ -312,11 +400,24 @@ export default function PlannerGrid({
               </tr>
             </thead>
             <tbody>
-              {employees.map((employee, rowIdx) => (
-                <tr key={employee.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              {employeeStoreGroups.flatMap((group) => {
+                const groupHeader = (
+                  <tr key={`${group.key}-header`}>
+                    <th
+                      colSpan={1 + days.length + (printWeeklyTotals ? weekSegments.length : 0)}
+                      className="sticky left-0 z-10 border border-gray-200 px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wide"
+                      style={{ backgroundColor: group.headerBgColor, color: group.headerTextColor }}
+                    >
+                      {group.label}
+                    </th>
+                  </tr>
+                );
+                const rows = group.employees.map((employee) => (
+                  <tr key={employee.id} style={{ backgroundColor: group.rowBgColor }}>
                   <th
                     scope="row"
-                    className="sticky left-0 z-20 whitespace-nowrap border border-gray-200 border-r border-gray-200 bg-white px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
+                    className="sticky left-0 z-20 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
+                    style={{ backgroundColor: group.rowBgColor }}
                   >
                     {employeeProfileBasePath ? (
                       <Link
@@ -376,6 +477,7 @@ export default function PlannerGrid({
                           onStatusDrop={onStatusDrop}
                           isEditing={!readOnly && !isVacation && !isUnavailable && editingKey === cellKey}
                           readOnly={readOnly}
+                          rowBackgroundColor={group.rowBgColor}
                           onActivate={() => {
                             if (!readOnly && !isVacation && !isUnavailable) setEditingKey(cellKey);
                           }}
@@ -409,7 +511,9 @@ export default function PlannerGrid({
                   });
                   })()}
                 </tr>
-              ))}
+                ));
+                return [groupHeader, ...rows];
+              })}
             </tbody>
           </table>
           </div>
