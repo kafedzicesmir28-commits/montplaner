@@ -3,13 +3,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Employee, Shift, Store, Vacation } from '@/types/database';
-import {
-  calculateHourBuckets,
-  effectiveBreakMinutes,
-  formatDate,
-  formatWorkHoursDisplay,
-  isDateInVacation,
-} from '@/lib/utils';
+import { calculateEmployeeHours } from '@/lib/hoursCalculator';
+import { formatDate, formatWorkHoursDisplay, isDateInVacation } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerCell, { type PlannerAssignment } from '@/components/PlannerCell';
 import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
@@ -131,16 +126,15 @@ function segmentDaysByISOWeek(days: Date[]): WeekSegment[] {
 }
 
 function getHoursForAssignment(assignment: AssignmentWithStore | undefined, shift: Shift | undefined): number {
-  if (assignment?.assignment_type && assignment.assignment_type !== 'SHIFT') return 0;
   if (!assignment || !shift) return 0;
-  const start = assignment.custom_start_time
-    ? String(assignment.custom_start_time).split(':').slice(0, 2).join(':')
-    : shift.start_time;
-  const end = assignment.custom_end_time
-    ? String(assignment.custom_end_time).split(':').slice(0, 2).join(':')
-    : shift.end_time;
-  const brk = effectiveBreakMinutes(assignment, shift);
-  return calculateHourBuckets(start, end, brk, assignment.date).totalHours;
+  return calculateEmployeeHours({
+    date: assignment.date,
+    assignment_type: assignment.assignment_type,
+    custom_start_time: assignment.custom_start_time,
+    custom_end_time: assignment.custom_end_time,
+    custom_break_minutes: assignment.custom_break_minutes,
+    shift,
+  });
 }
 
 function calculateWeeklyHours(

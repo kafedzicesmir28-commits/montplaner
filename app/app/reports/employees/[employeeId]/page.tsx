@@ -7,6 +7,14 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store, Vacation } from '@/types/database';
 import {
+  assignmentHourBuckets,
+  calculateEmployeeHours,
+  getEmployeeMonthlyHourTotals,
+  isKrankShiftName,
+  type PlannerShiftAssignmentRow,
+} from '@/lib/hoursCalculator';
+import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
+import {
   formatDate,
   formatErrorMessage,
   formatWorkHoursDisplay,
@@ -14,26 +22,12 @@ import {
   isDateInVacation,
 } from '@/lib/utils';
 
-type RpcRow = {
-  normal_hours: number;
-  night_hours: number;
-  sunday_hours: number;
-  vacation_days: number;
-  sick_days: number;
-  total_hours: number;
-};
-
 type AssignmentRow = ShiftAssignment & {
   custom_start_time?: string | null;
   custom_end_time?: string | null;
   shift: Shift | null;
   store: Store | null;
 };
-
-function isKrankShift(shift: Shift | null | undefined): boolean {
-  if (!shift?.name) return false;
-  return /\bkrank\b/i.test(shift.name);
-}
 
 function effectiveTimes(assignment: AssignmentRow): { start: string; end: string } {
   const sh = assignment.shift;
@@ -65,7 +59,9 @@ export default function EmployeeMonthlyReportPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [vacations, setVacations] = useState<Vacation[]>([]);
-  const [rpcTotals, setRpcTotals] = useState<RpcRow | null>(null);
+  const [monthTotals, setMonthTotals] = useState<ReturnType<typeof getEmployeeMonthlyHourTotals> | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,7 +86,7 @@ export default function EmployeeMonthlyReportPage() {
     setLoading(true);
     setError(null);
     try {
-      const [empRes, assignRes, vacRes, rpcRes] = await Promise.all([
+      const [empRes, assignRes, vacRes] = await Promise.all([
         supabase.from('employees').select('*').eq('id', employeeId).maybeSingle(),
         supabase
           .from('shift_assignments')
@@ -105,37 +101,23 @@ export default function EmployeeMonthlyReportPage() {
           .eq('employee_id', employeeId)
           .lte('start_date', monthEnd)
           .gte('end_date', monthStart),
-        supabase.rpc('calculate_employee_hours', {
-          p_employee_id: employeeId,
-          p_month: monthStart,
-        }),
       ]);
 
       if (empRes.error) throw empRes.error;
       if (assignRes.error) throw assignRes.error;
       if (vacRes.error) throw vacRes.error;
-      if (rpcRes.error) throw rpcRes.error;
 
       setEmployee(empRes.data as Employee | null);
-      setAssignments((assignRes.data || []) as AssignmentRow[]);
-      setVacations((vacRes.data || []) as Vacation[]);
+      const rawAssign = (assignRes.data || []) as AssignmentRow[];
+      setAssignments(rawAssign);
+      const vacs = (vacRes.data || []) as Vacation[];
+      setVacations(vacs);
 
-      const raw = (Array.isArray(rpcRes.data) ? rpcRes.data[0] : rpcRes.data) as RpcRow | null | undefined;
-      if (raw) {
-        setRpcTotals({
-          normal_hours: Number(raw.normal_hours),
-          night_hours: Number(raw.night_hours),
-          sunday_hours: Number(raw.sunday_hours),
-          vacation_days: Number(raw.vacation_days),
-          sick_days: Number(raw.sick_days),
-          total_hours: Number(raw.total_hours),
-        });
-      } else {
-        setRpcTotals(null);
-      }
+      const plannerRows = rawAssign as PlannerShiftAssignmentRow[];
+      setMonthTotals(getEmployeeMonthlyHourTotals(employeeId, monthStart, plannerRows, vacs));
     } catch (e: unknown) {
       setError(formatErrorMessage(e));
-      setRpcTotals(null);
+      setMonthTotals(null);
     } finally {
       setLoading(false);
     }
@@ -143,6 +125,15 @@ export default function EmployeeMonthlyReportPage() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      void load();
+    };
+    window.addEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
+    return () => window.removeEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
   }, [load]);
 
   const vacationOnDate = useCallback(
@@ -225,40 +216,38 @@ export default function EmployeeMonthlyReportPage() {
             </p>
           ) : null}
 
-          {rpcTotals ? (
+          {monthTotals ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-              <p className="mb-2 font-semibold text-gray-900">
-                Month totals (Supabase <code className="text-xs">calculate_employee_hours</code>)
-              </p>
+              <p className="mb-2 font-semibold text-gray-900">Month totals (planner — effective = Schicht − Pause)</p>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-6">
                 <div>
-                  <dt className="text-gray-500">Total hours</dt>
-                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.total_hours)}</dd>
+                  <dt className="text-gray-500">Effective hours (payroll base)</dt>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(monthTotals.total_hours)}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Normal hours</dt>
-                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.normal_hours)}</dd>
+                  <dt className="text-gray-500">Daytime share (info)</dt>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(monthTotals.normal_hours)}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Night hours</dt>
-                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.night_hours)}</dd>
+                  <dt className="text-gray-500">Night share (info)</dt>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(monthTotals.night_hours)}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Sunday hours</dt>
-                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(rpcTotals.sunday_hours)}</dd>
+                  <dt className="text-gray-500">Sunday share (info)</dt>
+                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(monthTotals.sunday_hours)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Vacation days</dt>
-                  <dd className="font-medium tabular-nums">{rpcTotals.vacation_days}</dd>
+                  <dd className="font-medium tabular-nums">{monthTotals.vacation_days}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Sick days</dt>
-                  <dd className="font-medium tabular-nums">{rpcTotals.sick_days}</dd>
+                  <dd className="font-medium tabular-nums">{monthTotals.sick_days}</dd>
                 </div>
               </dl>
               <p className="mt-2 text-xs text-gray-500">
-                All hour totals (total, normal, night, Sunday) come only from the RPC. Per-day worked /
-                night / Sunday cells are not computed in the browser.
+                Night and Sunday values are informational splits only; they are not added on top of effective
+                hours.
               </p>
             </div>
           ) : null}
@@ -286,13 +275,13 @@ export default function EmployeeMonthlyReportPage() {
                       End
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
-                      Worked hours
+                      Effective (h)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
-                      Night hours
+                      Night (info)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-600">
-                      Sunday hours
+                      Sunday (info)
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-600">
                       Status
@@ -335,7 +324,13 @@ export default function EmployeeMonthlyReportPage() {
                       const sh = assignment.shift;
                       const st = assignment.store;
                       const { start, end } = effectiveTimes(assignment);
-                      const status = isKrankShift(sh) ? 'Sick' : 'Normal';
+                      const isShift = (assignment.assignment_type ?? 'SHIFT') === 'SHIFT' && sh;
+                      const buckets = isShift ? assignmentHourBuckets({ ...assignment, shift: sh }) : null;
+                      const effectiveH = isShift ? calculateEmployeeHours({ ...assignment, shift: sh }) : null;
+                      const status =
+                        (assignment.assignment_type ?? 'SHIFT') === 'KRANK' || (sh && isKrankShiftName(sh.name))
+                          ? 'Sick'
+                          : 'Normal';
 
                       return (
                         <tr key={row.date} className="hover:bg-gray-50">
@@ -354,32 +349,38 @@ export default function EmployeeMonthlyReportPage() {
                           <td className="px-3 py-2 text-right tabular-nums text-gray-700">
                             {end ? formatClock(end) : '—'}
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-400">—</td>
-                          <td className="px-3 py-2 text-right text-gray-400">—</td>
-                          <td className="px-3 py-2 text-right text-gray-400">—</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-800">
+                            {effectiveH != null && effectiveH > 0 ? formatWorkHoursDisplay(effectiveH) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-800">
+                            {buckets ? formatWorkHoursDisplay(buckets.nightHours) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-800">
+                            {buckets ? formatWorkHoursDisplay(buckets.sundayHours) : '—'}
+                          </td>
                           <td className="px-3 py-2 text-gray-800">{status}</td>
                         </tr>
                       );
                     })
                   )}
                 </tbody>
-                {rpcTotals && tableRows.length > 0 ? (
+                {monthTotals && tableRows.length > 0 ? (
                   <tfoot className="border-t-2 border-gray-300 bg-gray-100">
                     <tr>
                       <td
                         colSpan={5}
                         className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-700"
                       >
-                        Month totals (RPC)
+                        Month totals (planner)
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                        {formatWorkHoursDisplay(rpcTotals.total_hours)}
+                        {formatWorkHoursDisplay(monthTotals.total_hours)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                        {formatWorkHoursDisplay(rpcTotals.night_hours)}
+                        {formatWorkHoursDisplay(monthTotals.night_hours)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm font-semibold tabular-nums text-gray-900">
-                        {formatWorkHoursDisplay(rpcTotals.sunday_hours)}
+                        {formatWorkHoursDisplay(monthTotals.sunday_hours)}
                       </td>
                       <td className="px-3 py-2 text-gray-400">—</td>
                     </tr>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import Link from 'next/link';
+import { CalendarDays, ChartColumn, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { Store } from '@/types/database';
 import { t } from '@/lib/translations';
@@ -73,6 +74,17 @@ export default function StoresPage() {
     }
   };
 
+  const deleteStore = async (storeId: string) => {
+    if (!confirm(t.areYouSureDeleteStore)) return;
+    try {
+      const { error } = await supabase.from('stores').delete().eq('id', storeId);
+      if (error) throw error;
+      await fetchStores();
+    } catch (error: any) {
+      alert(error?.message || 'Store konnte nicht gelöscht werden.');
+    }
+  };
+
   if (loading) {
     return (
       <AuthGuard>
@@ -135,16 +147,26 @@ export default function StoresPage() {
                         <div className="inline-flex items-center gap-2">
                           <Link
                             href={`/stores/${store.id}`}
-                            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                           >
+                            <CalendarDays size={14} />
                             {t.openPlanner}
                           </Link>
                           <Link
                             href={`/reports/stores/${store.id}`}
-                            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                           >
+                            <ChartColumn size={14} />
                             {t.openStoreReport}
                           </Link>
+                          <button
+                            type="button"
+                            onClick={() => deleteStore(store.id)}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                          >
+                            <Trash2 size={14} />
+                            {t.delete}
+                          </button>
                         </div>
                       </td>
                     </tr>

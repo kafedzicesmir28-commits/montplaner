@@ -1,6 +1,9 @@
 /* Montatsplaner — spreadsheet-only styling (light theme, no shadows/cards) */
 
 .root {
+  --year-col-w: 70px;
+  --month-col-w: 90px;
+  --label-col-w: 90px;
   width: 100%;
   background: #ffffff;
   font-family: Arial, Helvetica, sans-serif;
@@ -30,7 +33,7 @@
 
 .table {
   width: max-content;
-  min-width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   table-layout: fixed;
   border: 1px solid #cfd6de;
@@ -53,7 +56,9 @@
 }
 
 .headerYear {
-  width: 220px;
+  width: var(--year-col-w);
+  min-width: var(--year-col-w);
+  max-width: var(--year-col-w);
   height: 40px;
   text-align: center;
   vertical-align: middle;
@@ -62,17 +67,19 @@
 }
 
 .headerLabelSpacer {
-  width: 140px;
+  width: var(--label-col-w);
+  min-width: var(--label-col-w);
+  max-width: var(--label-col-w);
   height: 80px;
   position: sticky;
-  left: 220px;
+  left: var(--year-col-w);
   z-index: 13;
 }
 
 .headerEmployee {
-  width: 120px;
-  min-width: 120px;
-  max-width: 120px;
+  width: var(--month-col-w);
+  min-width: var(--month-col-w);
+  max-width: var(--month-col-w);
   height: 80px;
   padding: 4px 6px;
   vertical-align: middle;
@@ -96,7 +103,9 @@
 }
 
 .monthCell {
-  width: 220px;
+  width: var(--year-col-w);
+  min-width: var(--year-col-w);
+  max-width: var(--year-col-w);
   background: #ffffff;
   padding: 0;
   vertical-align: middle;
@@ -111,20 +120,24 @@
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 0.85rem;
   line-height: 1.2;
   padding: 8px 4px;
   max-height: 180px;
 }
 
 .labelCell {
-  width: 140px;
+  width: var(--label-col-w);
+  min-width: var(--label-col-w);
+  max-width: var(--label-col-w);
   text-align: left;
   font-weight: normal;
   padding-left: 8px;
   position: sticky;
-  left: 220px;
+  left: var(--year-col-w);
   z-index: 8;
+  white-space: nowrap;
+  font-size: 0.85rem;
 }
 
 .rowGeleistete {
@@ -152,11 +165,13 @@
 }
 
 .dataCell {
-  width: 120px;
-  min-width: 120px;
-  max-width: 120px;
+  width: var(--month-col-w);
+  min-width: var(--month-col-w);
+  max-width: var(--month-col-w);
   text-align: center;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-size: 0.85rem;
 }
 
 .cellInput {

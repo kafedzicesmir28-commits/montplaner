@@ -12,10 +12,19 @@ export function effectiveBreakMinutes(
   return Math.max(0, Math.floor(Number(shift?.break_minutes ?? 0)));
 }
 
+/**
+ * Breakdown for a single shift. Only `totalHours` is used for payroll / planner totals.
+ * `effectiveHours` / `nightHours` / `sundayHours` partition the same span for reporting (metadata);
+ * they must never be added on top of `totalHours`.
+ */
 export type HourBuckets = {
+  /** Efektiv: shift length minus break — the ONLY value that drives hour totals app-wide. */
   totalHours: number;
+  /** Informational: weekday daytime (non-night, non-Sunday) share after proportional break. */
   effectiveHours: number;
+  /** Informational: night-window share (20:00–06:00). */
   nightHours: number;
+  /** Informational: Sunday share. */
   sundayHours: number;
 };
 
@@ -59,11 +68,9 @@ export function calculateHours(
 }
 
 /**
- * Split shift duration into business buckets:
- * - effectiveHours: excludes night and Sunday minutes
- * - nightHours: night premium bucket (20:00-06:00)
- * - sundayHours: Sunday premium bucket
- * Break minutes are deducted proportionally across all buckets.
+ * Split shift duration into reporting buckets (metadata only for night/Sunday).
+ * `totalHours` is always (span − break) / 60 and is the canonical effective worked time.
+ * The other three fields are a partition of that span for Buchhaltung / statistics only.
  */
 export function calculateHourBuckets(
   startTime: string,

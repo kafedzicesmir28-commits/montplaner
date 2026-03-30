@@ -4,16 +4,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
+import {
+  getAllEmployeesHoursInPeriod,
+  getEmployeeMonthlyHourTotals,
+  type PlannerShiftAssignmentRow,
+} from '@/lib/hoursCalculator';
+import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
 import { formatDate, formatErrorMessage, monthsFirstOfMonthInRange, parseYmdLocal } from '@/lib/utils';
-import { HoursCalculation, Employee } from '@/types/database';
+import { HoursCalculation, Employee, Vacation } from '@/types/database';
 import { t } from '@/lib/translations';
 
 type RpcRow = {
   normal_hours: number;
   night_hours: number;
   sunday_hours: number;
-  vacation_days: number;
-  sick_days: number;
   total_hours: number;
 };
 
@@ -69,58 +73,65 @@ export default function AccountantPage() {
         return;
       }
 
-      const { data: employees, error: employeesError } = await supabase
-        .from('employees')
-        .select('*')
-        .order('name');
+      const [employeesRes, assignRes, vacRes] = await Promise.all([
+        supabase.from('employees').select('*').order('name'),
+        supabase
+          .from('shift_assignments')
+          .select('employee_id, date, assignment_type, custom_start_time, custom_end_time, custom_break_minutes, shift_id, store_id, shift:shifts(*)')
+          .gte('date', startDate)
+          .lte('date', endDate),
+        supabase
+          .from('vacations')
+          .select('*')
+          .lte('start_date', endDate)
+          .gte('end_date', startDate),
+      ]);
 
-      if (employeesError) throw employeesError;
+      if (employeesRes.error) throw employeesRes.error;
+      if (assignRes.error) throw assignRes.error;
+      if (vacRes.error) throw vacRes.error;
 
-      const list = (employees || []) as Employee[];
-      const months = monthsFirstOfMonthInRange(startDate, endDate);
+      const list = (employeesRes.data || []) as Employee[];
+      const assignments = (assignRes.data || []) as unknown as PlannerShiftAssignmentRow[];
+      const vacations = (vacRes.data || []) as Vacation[];
 
-      const rows: HoursCalculation[] = [];
-
-      for (const employee of list) {
-        let normal_hours = 0;
-        let night_hours = 0;
-        let sunday_hours = 0;
-        let total_hours = 0;
-        let vacation_days = 0;
-        let sick_days = 0;
-
-        for (const pMonth of months) {
-          const { data, error } = await supabase.rpc('calculate_employee_hours', {
-            p_employee_id: employee.id,
-            p_month: pMonth,
-          });
-
-          if (error) throw error;
-
-          const rpc = (Array.isArray(data) ? data[0] : data) as RpcRow | null | undefined;
-          if (!rpc) continue;
-
-          normal_hours += Number(rpc.normal_hours) || 0;
-          night_hours += Number(rpc.night_hours) || 0;
-          sunday_hours += Number(rpc.sunday_hours) || 0;
-          total_hours += Number(rpc.total_hours) || 0;
-          vacation_days += Number(rpc.vacation_days) || 0;
-          sick_days += Number(rpc.sick_days) || 0;
-        }
-
-        rows.push({
-          employee_id: employee.id,
-          employee_name: employee.name,
-          normal_hours,
-          night_hours,
-          sunday_hours,
-          total_hours,
-          vacation_days,
-          sick_days,
-        });
-      }
+      const rows = getAllEmployeesHoursInPeriod(
+        list.map((e) => ({ id: e.id, name: e.name })),
+        startDate,
+        endDate,
+        assignments,
+        vacations,
+      );
 
       setHoursData(rows);
+
+      if (process.env.NODE_ENV === 'development' && list.length > 0) {
+        const months = monthsFirstOfMonthInRange(startDate, endDate);
+        if (months.length > 0) {
+          const emp = list[0]!;
+          const m = months[0]!;
+          const ours = getEmployeeMonthlyHourTotals(emp.id, m, assignments, vacations);
+          const oursEff = ours.total_hours;
+          const { data, error } = await supabase.rpc('calculate_employee_hours', {
+            p_employee_id: emp.id,
+            p_month: m,
+          });
+          if (!error && data != null) {
+            const rpc = (Array.isArray(data) ? data[0] : data) as RpcRow | null | undefined;
+            if (rpc) {
+              const rpcEff = Number(rpc.total_hours) || 0;
+              if (Math.abs(rpcEff - oursEff) > 0.05) {
+                console.warn('[hours] Effective hours mismatch: planner vs RPC (sample)', {
+                  employeeId: emp.id,
+                  month: m,
+                  rpcEff,
+                  oursEff,
+                });
+              }
+            }
+          }
+        }
+      }
     } catch (error: unknown) {
       const msg = formatErrorMessage(error);
       console.error('Error calculating hours:', msg, error);
@@ -134,6 +145,15 @@ export default function AccountantPage() {
     void calculateHoursSummary();
   }, [calculateHoursSummary]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      void calculateHoursSummary();
+    };
+    window.addEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
+    return () => window.removeEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
+  }, [calculateHoursSummary]);
+
   const formatHours = (hours: number): string => hours.toFixed(2);
 
   const formatDays = (n: number): string => {
@@ -144,10 +164,10 @@ export default function AccountantPage() {
   const handleExportCsv = () => {
     const headers = [
       'Mitarbeiter',
-      'Normalstunden (h)',
-      'Nachtstunden (h)',
-      'Sonntagsstunden (h)',
-      'Stunden gesamt (h)',
+      'Efektive Arbeitsstunden (h)',
+      'Tag Anteil Info (h)',
+      'Nacht Anteil Info (h)',
+      'Sonntag Anteil Info (h)',
       'Urlaub (Tage)',
       'Krankheit (Tage)',
       'Auswertungszeitraum',
@@ -158,10 +178,10 @@ export default function AccountantPage() {
       ...hoursData.map((d) =>
         [
           d.employee_name,
+          formatHours(d.total_hours),
           formatHours(d.normal_hours),
           formatHours(d.night_hours),
           formatHours(d.sunday_hours),
-          formatHours(d.total_hours),
           formatDays(d.vacation_days),
           formatDays(d.sick_days),
           period,
@@ -180,10 +200,10 @@ export default function AccountantPage() {
       lines.push(
         [
           t.total,
+          formatHours(sumTot),
           formatHours(sumNormal),
           formatHours(sumNight),
           formatHours(sumSun),
-          formatHours(sumTot),
           formatDays(sumVac),
           formatDays(sumSick),
           period,
@@ -276,10 +296,10 @@ export default function AccountantPage() {
                   </th>
                 </tr>
                 <tr>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.normalHours}</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.nightHours}</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.sundayHours}</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.totalHours}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-700">{t.effectiveWorkHours}</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.daytimeHoursInfo}</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.nightHoursInfo}</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.sundayHoursInfo}</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.vacationDays}</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.sickDays}</th>
                 </tr>
@@ -288,6 +308,9 @@ export default function AccountantPage() {
                 {hoursData.map((data, index) => (
                   <tr key={data.employee_id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">{data.employee_name}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold text-gray-900">
+                      {formatHours(data.total_hours)}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-gray-800">
                       {formatHours(data.normal_hours)}
                     </td>
@@ -296,9 +319,6 @@ export default function AccountantPage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-gray-800">
                       {formatHours(data.sunday_hours)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold text-gray-900">
-                      {formatHours(data.total_hours)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-gray-800">
                       {formatDays(data.vacation_days)}
@@ -321,6 +341,9 @@ export default function AccountantPage() {
                   <tr>
                     <td className="whitespace-nowrap px-4 py-3 font-bold text-gray-900">{t.total}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
+                      {formatHours(hoursData.reduce((sum, data) => sum + data.total_hours, 0))}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
                       {formatHours(hoursData.reduce((sum, data) => sum + data.normal_hours, 0))}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
@@ -328,9 +351,6 @@ export default function AccountantPage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
                       {formatHours(hoursData.reduce((sum, data) => sum + data.sunday_hours, 0))}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
-                      {formatHours(hoursData.reduce((sum, data) => sum + data.total_hours, 0))}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
                       {formatDays(hoursData.reduce((sum, data) => sum + data.vacation_days, 0))}

@@ -3,13 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import {
-  calculateHourBuckets,
-  effectiveBreakMinutes,
-  formatDate,
-  formatErrorMessage,
-  formatWorkHoursDisplay,
-} from '@/lib/utils';
+import { calculateEmployeeHours } from '@/lib/hoursCalculator';
+import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
+import { formatDate, formatErrorMessage, formatWorkHoursDisplay } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
 
@@ -34,11 +30,6 @@ function formatClock(value: string): string {
   const part = value.split(':').slice(0, 2);
   if (part.length < 2) return value;
   return `${part[0]!.padStart(2, '0')}:${part[1]!.padStart(2, '0')}`;
-}
-
-function effectiveTime(base: string, custom: string | null | undefined): string {
-  if (custom == null || String(custom).trim() === '') return base;
-  return String(custom).split(':').slice(0, 2).join(':');
 }
 
 function yearOptions(): number[] {
@@ -122,10 +113,15 @@ export default function EmployeeMonthlyReport() {
         .filter((a) => (a.assignment_type ?? 'SHIFT') === 'SHIFT' && a.shift)
         .map((a) => {
           const shift = a.shift!;
-          const start = effectiveTime(shift.start_time, a.custom_start_time);
-          const end = effectiveTime(shift.end_time, a.custom_end_time);
-          const buckets = calculateHourBuckets(start, end, effectiveBreakMinutes(a, shift), a.date);
-          const worked = buckets.totalHours;
+          const worked = calculateEmployeeHours({ ...a, shift });
+          const start =
+            a.custom_start_time != null && String(a.custom_start_time).trim() !== ''
+              ? String(a.custom_start_time).split(':').slice(0, 2).join(':')
+              : shift.start_time;
+          const end =
+            a.custom_end_time != null && String(a.custom_end_time).trim() !== ''
+              ? String(a.custom_end_time).split(':').slice(0, 2).join(':')
+              : shift.end_time;
 
           return {
             id: a.id,
@@ -155,6 +151,15 @@ export default function EmployeeMonthlyReport() {
     if (loadingEmployees) return;
     void loadAssignments();
   }, [loadingEmployees, loadAssignments]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      void loadAssignments();
+    };
+    window.addEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
+    return () => window.removeEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
+  }, [loadAssignments]);
 
   const totalShifts = rows.length;
   const totalWorkedHours = useMemo(() => rows.reduce((sum, row) => sum + row.workedHours, 0), [rows]);

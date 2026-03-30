@@ -21,6 +21,8 @@ export default function EmployeesPage() {
   const [hourlyRate, setHourlyRate] = useState('');
   const [storeId, setStoreId] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -100,20 +102,13 @@ export default function EmployeesPage() {
     ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
   });
 
-  const swapEmployeeOrder = async (currentIndex: number, targetIndex: number) => {
-    if (targetIndex < 0 || targetIndex >= employees.length || savingOrder) return;
-
-    const reordered = [...employees];
-    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
-
+  const persistEmployeeOrder = async (reordered: Employee[]) => {
     setEmployees(reordered);
     setSavingOrder(true);
-
     try {
       const updates = reordered.map((employee, index) =>
         supabase.from('employees').update({ sort_order: index + 1 }).eq('id', employee.id)
       );
-
       const results = await Promise.all(updates);
       const failedUpdate = results.find((result) => result.error);
       if (failedUpdate?.error) throw failedUpdate.error;
@@ -123,6 +118,27 @@ export default function EmployeesPage() {
     } finally {
       setSavingOrder(false);
     }
+  };
+
+  const swapEmployeeOrder = async (currentIndex: number, targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= employees.length || savingOrder) return;
+    const reordered = [...employees];
+    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+    await persistEmployeeOrder(reordered);
+  };
+
+  const handleDropReorder = async (toIndex: number) => {
+    if (draggedIndex == null || draggedIndex === toIndex || savingOrder) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const reordered = [...employees];
+    const [moved] = reordered.splice(draggedIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    await persistEmployeeOrder(reordered);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -235,9 +251,9 @@ export default function EmployeesPage() {
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+          <div className="overflow-hidden rounded-xl border border-blue-100 bg-white shadow">
             <table className="min-w-full table-fixed divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gradient-to-r from-blue-50 via-indigo-50 to-cyan-50">
                 <tr>
                   <th className="w-[90px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.reorder}
@@ -269,10 +285,39 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {employees.map((employee, index) => (
-                  <tr key={employee.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  {employees.map((employee, index) => (
+                  <tr
+                    key={employee.id}
+                    draggable={!savingOrder}
+                    onDragStart={() => setDraggedIndex(index)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOverIndex !== index) setDragOverIndex(index);
+                    }}
+                    onDrop={() => { void handleDropReorder(index); }}
+                    onDragEnd={() => {
+                      setDraggedIndex(null);
+                      setDragOverIndex(null);
+                    }}
+                    className={`transition-colors ${
+                      draggedIndex === index
+                        ? 'bg-blue-50/70'
+                        : dragOverIndex === index
+                          ? 'bg-indigo-50'
+                          : index % 2 === 0
+                            ? 'bg-white'
+                            : 'bg-slate-50'
+                    }`}
+                  >
                     <td className="px-4 py-3 text-sm text-gray-700">
                       <div className="flex items-center gap-1">
+                        <span
+                          className="inline-flex h-8 w-6 items-center justify-center rounded border border-blue-200 bg-blue-50 text-[10px] font-bold text-blue-700"
+                          title="Drag to reorder"
+                          aria-label="Drag to reorder"
+                        >
+                          ⋮⋮
+                        </span>
                         <button
                           onClick={() => swapEmployeeOrder(index, index - 1)}
                           disabled={index === 0 || savingOrder}

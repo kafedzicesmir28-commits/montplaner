@@ -35,7 +35,6 @@ DECLARE
   v_effective numeric := 0;
   v_night numeric := 0;
   v_sunday numeric := 0;
-  v_total_effective numeric := 0;
   v_vacation_days int := 0;
   v_sick_days int := 0;
   rec record;
@@ -55,7 +54,6 @@ DECLARE
   effective_part numeric;
   night_part numeric;
   sunday_part numeric;
-  shift_effective numeric;
   minute_ts timestamp;
   minute_of_day int;
   minute_is_sunday boolean;
@@ -148,9 +146,7 @@ BEGIN
     effective_part := (effective_minutes::numeric / 60.0) * scale_factor;
     night_part := (night_minutes::numeric / 60.0) * scale_factor;
     sunday_part := (sunday_minutes::numeric / 60.0) * scale_factor;
-    shift_effective := effective_part;
 
-    v_total_effective := v_total_effective + shift_effective;
     v_effective := v_effective + effective_part;
     v_night := v_night + night_part;
     v_sunday := v_sunday + sunday_part;
@@ -161,7 +157,8 @@ BEGIN
   sunday_hours := round(v_sunday, 4);
   vacation_days := v_vacation_days;
   sick_days := v_sick_days;
-  total_hours := round(v_total_effective, 4);
+  -- Total worked hours = all buckets (matches app `calculateHourBuckets` totalHours).
+  total_hours := round(v_effective + v_night + v_sunday, 4);
   RETURN NEXT;
 END;
 $$;

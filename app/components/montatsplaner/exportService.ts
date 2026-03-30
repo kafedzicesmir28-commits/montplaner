@@ -55,9 +55,9 @@ export async function exportPlannerExcel(params: {
   });
 
   ws.columns = [
-    { width: 32 },
-    { width: 22 },
-    ...employees.map(() => ({ width: 9 })),
+    { width: 10 },
+    { width: 14 },
+    ...employees.map(() => ({ width: 10 })),
   ];
 
   let r = 1;
@@ -187,27 +187,81 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
   const el = document.getElementById(elementId);
   if (!el) return;
 
-  const canvas = await html2canvas(el, {
-    scale: 2,
-    backgroundColor: '#ffffff',
-    useCORS: true,
-    logging: false,
+  const offscreen = document.createElement('div');
+  offscreen.id = 'export-full-table';
+  offscreen.style.position = 'absolute';
+  offscreen.style.left = '-9999px';
+  offscreen.style.top = '0';
+  offscreen.style.background = '#ffffff';
+  offscreen.style.overflow = 'visible';
+  offscreen.style.maxWidth = 'none';
+  offscreen.style.width = `${el.scrollWidth || el.clientWidth}px`;
+  offscreen.style.padding = '0';
+
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.style.overflow = 'visible';
+  clone.style.maxHeight = 'none';
+  clone.style.maxWidth = 'none';
+  clone.style.width = 'max-content';
+  clone.style.height = 'auto';
+
+  // Ensure export clone renders full table, not viewport-scrolled shell.
+  const topScroll = clone.querySelector(':scope > div:first-child') as HTMLElement | null;
+  if (topScroll) topScroll.style.display = 'none';
+  const bottomScroll = clone.querySelector(':scope > div:nth-child(2)') as HTMLElement | null;
+  if (bottomScroll) {
+    bottomScroll.style.overflow = 'visible';
+    bottomScroll.style.maxHeight = 'none';
+    bottomScroll.style.height = 'auto';
+  }
+  clone.querySelectorAll<HTMLElement>('*').forEach((node) => {
+    const style = node.style;
+    if (style.overflowX === 'auto' || style.overflowY === 'auto' || style.overflow === 'auto') {
+      style.overflow = 'visible';
+    }
+    if (style.maxHeight) style.maxHeight = 'none';
   });
 
-  const imgData = canvas.toDataURL('image/png');
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-  const imgW = canvas.width;
-  const imgH = canvas.height;
-  const margin = 6;
-  const usableW = pageW - margin * 2;
-  const usableH = pageH - margin * 2;
-  const ratio = Math.min(usableW / imgW, usableH / imgH);
-  const w = imgW * ratio;
-  const h = imgH * ratio;
-  const x = (pageW - w) / 2;
-  const y = (pageH - h) / 2;
-  pdf.addImage(imgData, 'PNG', x, y, w, h);
-  pdf.save('Montatsplaner.pdf');
+  offscreen.appendChild(clone);
+  document.body.appendChild(offscreen);
+  try {
+    const canvas = await html2canvas(clone, {
+      scale: 1.8,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      windowWidth: clone.scrollWidth,
+      windowHeight: clone.scrollHeight,
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    const margin = 6;
+    const usableW = pageW - margin * 2;
+    const usableH = pageH - margin * 2;
+    const scale = Math.min(1, usableW / imgW);
+    const renderW = imgW * scale;
+    const renderH = imgH * scale;
+    const x = margin + (usableW - renderW) / 2;
+
+    // Multi-page vertical rendering: keep full width, paginate down the height.
+    const pageRenderH = usableH;
+    let renderedY = 0;
+    let pageIndex = 0;
+    while (renderedY < renderH - 0.1) {
+      const y = margin - renderedY;
+      if (pageIndex > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', x, y, renderW, renderH);
+      renderedY += pageRenderH;
+      pageIndex += 1;
+    }
+
+    pdf.save('Montatsplaner.pdf');
+  } finally {
+    document.body.removeChild(offscreen);
+  }
 }

@@ -5,7 +5,9 @@ import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
-import { assignmentTotalWorkHours, paidWorkHoursFromRpcBuckets } from '@/lib/reportsAnalytics';
+import { getEmployeeMonthlyHourTotals, type PlannerShiftAssignmentRow } from '@/lib/hoursCalculator';
+import { assignmentTotalWorkHours } from '@/lib/reportsAnalytics';
+import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
 import {
   formatDate,
   formatErrorMessage,
@@ -14,7 +16,7 @@ import {
   parseYmdLocal,
 } from '@/lib/utils';
 import { resolveStoreColor } from '@/lib/storeColors';
-import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
+import type { Employee, Shift, ShiftAssignment, Store, Vacation } from '@/types/database';
 import { t } from '@/lib/translations';
 import { BarChart3 } from 'lucide-react';
 
@@ -22,12 +24,6 @@ type AssignRow = ShiftAssignment & {
   custom_start_time?: string | null;
   custom_end_time?: string | null;
   shift?: Shift | null;
-};
-
-type RpcBuckets = {
-  normal_hours: number;
-  night_hours: number;
-  sunday_hours: number;
 };
 
 function formatPeriodLabel(startYmd: string, endYmd: string): string {
@@ -85,7 +81,7 @@ export default function ReportsHubPage() {
     const months = monthsFirstOfMonthInRange(startDate, endDate);
 
     try {
-      const [storesRes, employeesRes, assignRes] = await Promise.all([
+      const [storesRes, employeesRes, assignRes, vacRes] = await Promise.all([
         supabase.from('stores').select('*').order('name'),
         supabase
           .from('employees')
@@ -97,13 +93,21 @@ export default function ReportsHubPage() {
           .select('*, shift:shifts(*)')
           .gte('date', startDate)
           .lte('date', endDate),
+        supabase
+          .from('vacations')
+          .select('*')
+          .lte('start_date', endDate)
+          .gte('end_date', startDate),
       ]);
 
       if (storesRes.error) throw storesRes.error;
       if (employeesRes.error) throw employeesRes.error;
       if (assignRes.error) throw assignRes.error;
+      if (vacRes.error) throw vacRes.error;
 
       const listEmployees = (employeesRes.data || []) as Employee[];
+      const assignRows = (assignRes.data || []) as PlannerShiftAssignmentRow[];
+      const vacations = (vacRes.data || []) as Vacation[];
       setStores((storesRes.data || []) as Store[]);
       setEmployees(listEmployees);
       setAssignments((assignRes.data || []) as AssignRow[]);
@@ -112,19 +116,12 @@ export default function ReportsHubPage() {
 
       for (const pMonth of months) {
         const monthKey = pMonth.slice(0, 7);
-        await Promise.all(
-          listEmployees.map(async (emp) => {
-            const { data, error: rpcError } = await supabase.rpc('calculate_employee_hours', {
-              p_employee_id: emp.id,
-              p_month: pMonth,
-            });
-            if (rpcError) throw rpcError;
-            const rpc = (Array.isArray(data) ? data[0] : data) as RpcBuckets | null | undefined;
-            const paid = rpc ? paidWorkHoursFromRpcBuckets(rpc) : 0;
-            if (!paidMap.has(emp.id)) paidMap.set(emp.id, new Map());
-            paidMap.get(emp.id)!.set(monthKey, paid);
-          }),
-        );
+        for (const emp of listEmployees) {
+          const totals = getEmployeeMonthlyHourTotals(emp.id, pMonth, assignRows, vacations);
+          const paid = totals.total_hours;
+          if (!paidMap.has(emp.id)) paidMap.set(emp.id, new Map());
+          paidMap.get(emp.id)!.set(monthKey, paid);
+        }
       }
 
       setEmployeeMonthPaid(paidMap);
@@ -141,6 +138,15 @@ export default function ReportsHubPage() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      void load();
+    };
+    window.addEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
+    return () => window.removeEventListener(PLANNER_ASSIGNMENTS_CHANGED, handler);
   }, [load]);
 
   const shiftAssignmentRows = useMemo(

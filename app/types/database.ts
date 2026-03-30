@@ -55,9 +55,13 @@ export interface ShiftAssignmentWithDetails extends ShiftAssignment {
 export interface HoursCalculation {
   employee_id: string;
   employee_name: string;
+  /** Informational: daytime bucket — not added to `total_hours`. */
   normal_hours: number;
+  /** Informational: night bucket — not added to `total_hours`. */
   night_hours: number;
+  /** Informational: Sunday bucket — not added to `total_hours`. */
   sunday_hours: number;
+  /** Efektiv: effective worked hours (duration − break) — sole payroll total. */
   total_hours: number;
   vacation_days: number;
   sick_days: number;
