@@ -104,10 +104,15 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   return null;
 }
 
-function tintHex(hex: string, alpha: number, fallback = '#f5f5f5'): string {
+function mixWithWhite(hex: string, amount: number, fallback = '#f5f5f5'): string {
   const rgb = hexToRgb(hex);
   if (!rgb) return fallback;
-  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+  const a = Math.max(0, Math.min(1, amount));
+  const r = Math.round(rgb.r + (255 - rgb.r) * a);
+  const g = Math.round(rgb.g + (255 - rgb.g) * a);
+  const b = Math.round(rgb.b + (255 - rgb.b) * a);
+  const toHex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 function segmentDaysByISOWeek(days: Date[]): WeekSegment[] {
@@ -201,8 +206,9 @@ export default function PlannerGrid({
   const employeeStoreGroups = useMemo<EmployeeStoreGroup[]>(() => {
     const byName = (a: Employee, b: Employee) => a.name.localeCompare(b.name);
     const toGroupPalette = (baseColor: string) => ({
-      rowBgColor: tintHex(baseColor, 0.16, '#f5f5f5'),
-      headerBgColor: tintHex(baseColor, 0.28, '#ececec'),
+      // Use opaque pastel shades so sticky cells never look transparent while scrolling.
+      rowBgColor: mixWithWhite(baseColor, 0.82, '#f5f5f5'),
+      headerBgColor: mixWithWhite(baseColor, 0.72, '#ececec'),
       headerTextColor: storeTextColor(baseColor),
     });
     if (forceStoreId) {
@@ -405,8 +411,12 @@ export default function PlannerGrid({
                   <tr key={`${group.key}-header`}>
                     <th
                       colSpan={1 + days.length + (printWeeklyTotals ? weekSegments.length : 0)}
-                      className="sticky left-0 z-10 border border-gray-200 px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wide"
-                      style={{ backgroundColor: group.headerBgColor, color: group.headerTextColor }}
+                      className="sticky left-0 z-40 border border-gray-200 px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wide"
+                      style={{
+                        backgroundColor: group.headerBgColor,
+                        color: group.headerTextColor,
+                        backgroundClip: 'padding-box',
+                      }}
                     >
                       {group.label}
                     </th>
@@ -416,8 +426,11 @@ export default function PlannerGrid({
                   <tr key={employee.id} style={{ backgroundColor: group.rowBgColor }}>
                   <th
                     scope="row"
-                    className="sticky left-0 z-20 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
-                    style={{ backgroundColor: group.rowBgColor }}
+                    className="sticky left-0 z-30 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
+                    style={{
+                      backgroundColor: group.rowBgColor,
+                      backgroundClip: 'padding-box',
+                    }}
                   >
                     {employeeProfileBasePath ? (
                       <Link

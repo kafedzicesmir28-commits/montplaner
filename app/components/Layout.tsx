@@ -46,7 +46,7 @@ export default function Layout({
   return (
     <div className="min-h-screen bg-[#f8f9fb] text-gray-900 print:bg-white">
       {isPlannerRoute ? (
-        <nav className="print:hidden border-b border-gray-200 bg-white">
+        <nav className="print:hidden sticky top-0 z-[100] border-b border-gray-200 bg-white shadow-sm">
           <div className="mx-auto max-w-none px-4 sm:px-6 lg:px-6 xl:px-8">
             <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 py-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -65,7 +65,7 @@ export default function Layout({
                 </Link>
               </div>
               {plannerControls ? (
-                <div className="flex flex-1 items-center justify-center gap-2 overflow-x-auto">
+                <div className="relative z-[101] flex flex-1 items-center justify-center gap-2 overflow-x-auto">
                   {plannerControls}
                 </div>
               ) : null}
@@ -79,7 +79,7 @@ export default function Layout({
           </div>
         </nav>
       ) : (
-        <nav className="print:hidden border-b border-gray-200 bg-white">
+        <nav className="print:hidden relative z-[10] border-b border-gray-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex h-16 justify-between">
               <div className="flex">

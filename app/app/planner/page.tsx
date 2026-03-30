@@ -239,7 +239,7 @@ export default function PlannerPage() {
       >
         <div className="print:hidden space-y-3 pt-0">
 
-          <div className="sticky top-0 z-30 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+          <div className="sticky top-14 z-[80] rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">Stores (drag to a day cell)</div>
