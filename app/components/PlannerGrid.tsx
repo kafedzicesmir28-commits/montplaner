@@ -34,6 +34,7 @@ export type PlannerGridProps = {
   storesLoaded?: boolean;
   showPositionControls?: boolean;
   onMoveEmployeeToPosition?: (employeeId: string, newPosition: number) => void | Promise<void>;
+  onSwapEmployeePosition?: (employeeId: string, newPosition: number) => void | Promise<void>;
   savingEmployeeOrder?: boolean;
 };
 
@@ -167,6 +168,7 @@ export default function PlannerGrid({
   storesLoaded = true,
   showPositionControls = false,
   onMoveEmployeeToPosition,
+  onSwapEmployeePosition,
   savingEmployeeOrder = false,
 }: PlannerGridProps) {
   const weekSegments = useMemo(() => segmentDaysByISOWeek(days), [days]);
@@ -214,8 +216,8 @@ export default function PlannerGrid({
     const parsed = Number.parseInt(raw ?? '', 10);
     if (!Number.isFinite(parsed)) return;
     const bounded = Math.max(1, Math.min(parsed, orderedEmployees.length));
-    await onMoveEmployeeToPosition?.(employeeId, bounded - 1);
-  }, [onMoveEmployeeToPosition, orderedEmployees.length, positionInputByEmployee]);
+    await onSwapEmployeePosition?.(employeeId, bounded);
+  }, [onSwapEmployeePosition, orderedEmployees.length, positionInputByEmployee]);
 
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {

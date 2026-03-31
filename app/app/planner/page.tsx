@@ -356,6 +356,55 @@ export default function PlannerPage() {
     }
   }, [employees, fetchAllData, savingEmployeeOrder]);
 
+  const swapEmployeePosition = useCallback(async (employeeId: string, newPosition: number) => {
+    if (savingEmployeeOrder) return;
+    const sorted = [...employees].sort((a, b) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name);
+    });
+    const workerA = sorted.find((w) => w.id === employeeId);
+    if (!workerA) return;
+    const maxPosition = sorted.length;
+    const clampedPosition = Math.max(1, Math.min(newPosition, maxPosition));
+    const workerB = sorted[clampedPosition - 1];
+    if (!workerB || workerB.id === workerA.id) return;
+
+    const next = sorted.map((w) => ({ ...w }));
+    const indexA = next.findIndex((w) => w.id === workerA.id);
+    const indexB = next.findIndex((w) => w.id === workerB.id);
+    if (indexA < 0 || indexB < 0) return;
+    const posA = next[indexA].sort_order ?? indexA + 1;
+    const posB = next[indexB].sort_order ?? indexB + 1;
+    next[indexA].sort_order = posB;
+    next[indexB].sort_order = posA;
+
+    const persistedOrder = [...next].sort((a, b) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name);
+    });
+    setEmployees(persistedOrder);
+    setSavingEmployeeOrder(true);
+    try {
+      const updates = [
+        supabase.from('employees').update({ sort_order: posB }).eq('id', workerA.id),
+        supabase.from('employees').update({ sort_order: posA }).eq('id', workerB.id),
+      ];
+      const results = await Promise.all(updates);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Failed to swap employee positions';
+      alert(message);
+      await fetchAllData({ preserveView: true });
+    } finally {
+      setSavingEmployeeOrder(false);
+    }
+  }, [employees, fetchAllData, savingEmployeeOrder]);
+
   const openPrintModal = useCallback(() => {
     const base = printSelection ?? defaultWeekSelection;
     setSelectedWeekA(base.weekA);
@@ -491,6 +540,7 @@ export default function PlannerPage() {
             showPositionControls
             savingEmployeeOrder={savingEmployeeOrder}
             onMoveEmployeeToPosition={moveEmployeeToPosition}
+            onSwapEmployeePosition={swapEmployeePosition}
           />
         </div>
 
