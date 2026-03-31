@@ -81,10 +81,6 @@ export default function PlannerPage() {
   const [printScale, setPrintScale] = useState(1);
   const [pendingStoreByKey, setPendingStoreByKey] = useState<Record<string, string>>({});
   const [savingEmployeeOrder, setSavingEmployeeOrder] = useState(false);
-  const [dragContext, setDragContext] = useState<{ workerId: string | null; sourceStoreId: string | null }>({
-    workerId: null,
-    sourceStoreId: null,
-  });
   const printRootRef = useRef<HTMLDivElement>(null);
 
   const year = currentDate.getFullYear();
@@ -324,15 +320,29 @@ export default function PlannerPage() {
     }
   }, [fetchAllData]);
 
-  const persistEmployeeOrder = useCallback(async (reordered: Employee[]) => {
+  const moveEmployeeToPosition = useCallback(async (employeeId: string, newPosition: number) => {
+    if (savingEmployeeOrder) return;
+    const sorted = [...employees].sort((a, b) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name);
+    });
+    const movingWorker = sorted.find((w) => w.id === employeeId);
+    if (!movingWorker) return;
+    const filtered = sorted.filter((w) => w.id !== employeeId);
+    const boundedPosition = Math.max(0, Math.min(newPosition, filtered.length));
+    filtered.splice(boundedPosition, 0, movingWorker);
+    const reordered = filtered.map((worker, index) => ({
+      ...worker,
+      sort_order: index + 1,
+    }));
+
     setEmployees(reordered);
     setSavingEmployeeOrder(true);
     try {
-      const updates = reordered.map((employee, index) =>
-        supabase
-          .from('employees')
-          .update({ sort_order: index + 1, store_id: employee.store_id ?? null })
-          .eq('id', employee.id)
+      const updates = reordered.map((worker) =>
+        supabase.from('employees').update({ sort_order: worker.sort_order ?? null }).eq('id', worker.id)
       );
       const results = await Promise.all(updates);
       const failed = results.find((r) => r.error);
@@ -344,59 +354,7 @@ export default function PlannerPage() {
     } finally {
       setSavingEmployeeOrder(false);
     }
-  }, [fetchAllData]);
-
-  const handleEmployeeReorder = useCallback(async (
-    employeeId: string,
-    targetStoreId: string | null,
-    targetIndexInStore: number
-  ) => {
-    if (savingEmployeeOrder) return;
-    const sourceEmployee = employees.find((e) => e.id === employeeId);
-    if (!sourceEmployee) return;
-
-    const normalizedTargetStoreId = targetStoreId ?? null;
-    const orderByStore = new Map<string | null, Employee[]>();
-    const storeOrder = [...stores.map((s) => s.id), null];
-    for (const storeId of storeOrder) {
-      orderByStore.set(storeId, []);
-    }
-    for (const employee of employees) {
-      const sid = employee.store_id ?? null;
-      if (!orderByStore.has(sid)) orderByStore.set(sid, []);
-      orderByStore.get(sid)!.push(employee);
-    }
-
-    // Worker movement must NEVER depend on source store.
-    // Movement is always remove-from-all + insert-into-target.
-    const movedWorker = sourceEmployee;
-    for (const [sid, list] of orderByStore.entries()) {
-      orderByStore.set(
-        sid,
-        list.filter((e) => e.id !== employeeId)
-      );
-    }
-
-    const targetList = [...(orderByStore.get(normalizedTargetStoreId) ?? [])];
-    const insertAt = Math.max(0, Math.min(targetIndexInStore, targetList.length));
-    targetList.splice(insertAt, 0, { ...movedWorker, store_id: normalizedTargetStoreId });
-    orderByStore.set(normalizedTargetStoreId, targetList);
-
-    const rebuilt: Employee[] = [];
-    for (const sid of storeOrder) {
-      rebuilt.push(...(orderByStore.get(sid) ?? []));
-    }
-    for (const [sid, list] of orderByStore.entries()) {
-      if (!storeOrder.includes(sid)) rebuilt.push(...list);
-    }
-
-    console.log('SAFE MOVE', {
-      worker: movedWorker.name,
-      from: movedWorker.store_id ?? 'unassigned',
-      to: normalizedTargetStoreId ?? 'unassigned',
-    });
-    await persistEmployeeOrder(rebuilt);
-  }, [employees, persistEmployeeOrder, savingEmployeeOrder, stores]);
+  }, [employees, fetchAllData, savingEmployeeOrder]);
 
   const openPrintModal = useCallback(() => {
     const base = printSelection ?? defaultWeekSelection;
@@ -530,11 +488,9 @@ export default function PlannerPage() {
             onStoreDrop={handleStoreDrop}
             onStatusDrop={handleStatusDrop}
             storesLoaded={storesLoaded}
-            enableEmployeeRowDrag
+            showPositionControls
             savingEmployeeOrder={savingEmployeeOrder}
-            onEmployeeReorder={handleEmployeeReorder}
-            dragContext={dragContext}
-            onDragContextChange={setDragContext}
+            onMoveEmployeeToPosition={moveEmployeeToPosition}
           />
         </div>
 

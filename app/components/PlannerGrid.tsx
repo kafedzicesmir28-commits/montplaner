@@ -32,15 +32,9 @@ export type PlannerGridProps = {
   onStoreDrop?: (employeeId: string, dateStr: string, storeId: string | null) => void;
   onStatusDrop?: (employeeId: string, dateStr: string, statusType: 'FREI' | 'KRANK' | 'FERIEN') => void;
   storesLoaded?: boolean;
-  enableEmployeeRowDrag?: boolean;
+  showPositionControls?: boolean;
+  onMoveEmployeeToPosition?: (employeeId: string, newPosition: number) => void | Promise<void>;
   savingEmployeeOrder?: boolean;
-  onEmployeeReorder?: (
-    employeeId: string,
-    targetStoreId: string | null,
-    targetIndexInStore: number
-  ) => void | Promise<void>;
-  dragContext?: { workerId: string | null; sourceStoreId: string | null };
-  onDragContextChange?: (ctx: { workerId: string | null; sourceStoreId: string | null }) => void;
 };
 
 function isVacationDay(vacations: Vacation[], employeeId: string, date: string): boolean {
@@ -79,18 +73,6 @@ type WeekSegment = {
   weekYear: number;
   days: Date[];
 };
-
-type EmployeeStoreGroup = {
-  key: string;
-  storeId: string | null;
-  label: string;
-  rowBgColor: string;
-  headerBgColor: string;
-  headerTextColor: string;
-  employees: Employee[];
-};
-
-const ALLOW_FREE_STORE_MOVEMENT = true;
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const h = hex.replace(/^#/, '');
@@ -183,11 +165,9 @@ export default function PlannerGrid({
   onStoreDrop,
   onStatusDrop,
   storesLoaded = true,
-  enableEmployeeRowDrag = false,
+  showPositionControls = false,
+  onMoveEmployeeToPosition,
   savingEmployeeOrder = false,
-  onEmployeeReorder,
-  dragContext,
-  onDragContextChange,
 }: PlannerGridProps) {
   const weekSegments = useMemo(() => segmentDaysByISOWeek(days), [days]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -196,7 +176,6 @@ export default function PlannerGrid({
   const bottomScrollRef = useRef<HTMLDivElement>(null);
   const syncingFromRef = useRef<'top' | 'bottom' | null>(null);
   const [tableWidth, setTableWidth] = useState(0);
-  const [dragTarget, setDragTarget] = useState<{ storeId: string | null; insertIndex: number } | null>(null);
   const storeMap = useMemo(() => {
     const map = new Map<string, StoreRow>();
     for (const store of stores) {
@@ -215,55 +194,20 @@ export default function PlannerGrid({
     () => new Set(unavailableDayKeys ?? []),
     [unavailableDayKeys]
   );
-  const employeeStoreGroups = useMemo<EmployeeStoreGroup[]>(() => {
-    const toGroupPalette = (baseColor: string) => ({
-      // Use opaque pastel shades so sticky cells never look transparent while scrolling.
-      rowBgColor: mixWithWhite(baseColor, 0.82, '#f5f5f5'),
-      headerBgColor: mixWithWhite(baseColor, 0.72, '#ececec'),
-      headerTextColor: storeTextColor(baseColor),
+  const visibleEmployees = useMemo(() => {
+    if (!forceStoreId) return employees;
+    return employees.filter((employee) => employee.store_id === forceStoreId);
+  }, [employees, forceStoreId]);
+  const orderedEmployees = useMemo(() => {
+    // Worker visual order is controlled ONLY by position index.
+    // UI order must never depend on array index or drag state.
+    return [...visibleEmployees].sort((a, b) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return a.name.localeCompare(b.name);
     });
-    if (forceStoreId) {
-      const forcedLabel = storeMap.get(forceStoreId)?.name ?? t.employeeStore;
-      const baseColor = resolveStoreColor(storeMap.get(forceStoreId)?.color ?? '#f5f5f5');
-      return [
-        {
-          key: `store:${forceStoreId}`,
-          storeId: forceStoreId,
-          label: forcedLabel,
-          ...toGroupPalette(baseColor),
-          employees: [...employees],
-        },
-      ];
-    }
-
-    const grouped = new Map<string, Employee[]>();
-    for (const employee of employees) {
-      const storeId = employee.store_id ?? '';
-      if (!grouped.has(storeId)) grouped.set(storeId, []);
-      grouped.get(storeId)!.push(employee);
-    }
-    const out: EmployeeStoreGroup[] = stores.map((storeIdRow) => {
-      const storeId = storeIdRow.id;
-      const baseColor = resolveStoreColor(storeMap.get(storeId)?.color ?? '#f5f5f5');
-      return {
-        key: `store:${storeId}`,
-        storeId,
-        label: storeMap.get(storeId)?.name ?? storeId,
-        ...toGroupPalette(baseColor),
-        employees: grouped.get(storeId) ?? [],
-      };
-    });
-
-    const unassigned = grouped.get('') ?? [];
-    out.push({
-      key: 'store:unassigned',
-      storeId: null,
-      label: t.unassignedStore,
-      ...toGroupPalette('#f5f5f5'),
-      employees: unassigned,
-    });
-    return out;
-  }, [employees, forceStoreId, storeMap, stores]);
+  }, [visibleEmployees]);
 
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
@@ -335,41 +279,7 @@ export default function PlannerGrid({
     };
   }, []);
 
-  useEffect(() => {
-    if (savingEmployeeOrder) {
-      onDragContextChange?.({ workerId: null, sourceStoreId: null });
-      setDragTarget(null);
-    }
-  }, [onDragContextChange, savingEmployeeOrder]);
-
   if (!storesLoaded) return null;
-
-  const totalColumnCount = 1 + days.length + (printWeeklyTotals ? weekSegments.length : 0);
-  const resolveDraggedEmployeeId = useCallback((event?: React.DragEvent) => {
-    const idFromTransfer = event?.dataTransfer?.getData('application/x-employee-id') || '';
-    return idFromTransfer || dragContext?.workerId || null;
-  }, [dragContext?.workerId]);
-
-  const handleDropIntoStore = useCallback(async (
-    storeId: string | null,
-    insertIndex: number,
-    event?: React.DragEvent
-  ) => {
-    const effectiveDraggedEmployeeId = resolveDraggedEmployeeId(event);
-    if (
-      !onEmployeeReorder ||
-      !effectiveDraggedEmployeeId ||
-      savingEmployeeOrder ||
-      readOnly ||
-      !enableEmployeeRowDrag ||
-      !ALLOW_FREE_STORE_MOVEMENT
-    ) {
-      return;
-    }
-    await onEmployeeReorder(effectiveDraggedEmployeeId, storeId, insertIndex);
-    onDragContextChange?.({ workerId: null, sourceStoreId: null });
-    setDragTarget(null);
-  }, [enableEmployeeRowDrag, onDragContextChange, onEmployeeReorder, readOnly, resolveDraggedEmployeeId, savingEmployeeOrder]);
 
   return (
     <div ref={gridRef} className="rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -455,134 +365,69 @@ export default function PlannerGrid({
               </tr>
             </thead>
             <tbody>
-              {employeeStoreGroups.flatMap((group) => {
-                const groupHeader = (
-                  <tr key={`${group.key}-header`}>
-                    <th
-                      colSpan={totalColumnCount}
-                      className={`sticky left-0 z-40 border border-gray-200 px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wide ${
-                        dragContext?.workerId && dragTarget?.storeId === group.storeId
-                          ? 'outline outline-2 outline-[#FFD700]'
-                          : ''
-                      }`}
-                      style={{
-                        backgroundColor:
-                          dragContext?.workerId && dragTarget?.storeId === group.storeId
-                            ? '#fff8cc'
-                            : group.headerBgColor,
-                        color: group.headerTextColor,
-                        backgroundClip: 'padding-box',
-                      }}
-                    >
-                      {group.label}
-                    </th>
-                  </tr>
-                );
-                const canDropInGroup =
-                  ALLOW_FREE_STORE_MOVEMENT &&
-                  enableEmployeeRowDrag &&
-                  !readOnly &&
-                  !savingEmployeeOrder &&
-                  !!onEmployeeReorder;
-                const leadGap = (
-                  <tr key={`${group.key}-gap-start`}>
-                    <td
-                      colSpan={totalColumnCount}
-                      onDragOver={(e) => {
-                        const effectiveDraggedEmployeeId = resolveDraggedEmployeeId(e);
-                        if (!canDropInGroup || !effectiveDraggedEmployeeId) return;
-                        e.preventDefault();
-                        setDragTarget({ storeId: group.storeId, insertIndex: 0 });
-                      }}
-                      onDrop={(e) => {
-                        void handleDropIntoStore(group.storeId, 0, e);
-                      }}
-                      className={`h-2 border-x border-gray-200 ${
-                        dragTarget?.storeId === group.storeId && dragTarget?.insertIndex === 0
-                          ? 'bg-[#ffe066]/70 outline outline-2 outline-[#FFD700]'
-                          : ''
-                      }`}
-                    />
-                  </tr>
-                );
-
-                const rows = group.employees.flatMap((employee, rowIndex) => {
-                  const canDragRow =
-                    ALLOW_FREE_STORE_MOVEMENT &&
-                    enableEmployeeRowDrag &&
-                    !readOnly &&
-                    !savingEmployeeOrder &&
-                    !!onEmployeeReorder;
-                  const isDraggingThisRow = dragContext?.workerId === employee.id;
-                  const nextInsertIndex = rowIndex + 1;
-                  const trailingGap = (
-                    <tr key={`${group.key}-gap-${employee.id}`}>
-                      <td
-                        colSpan={totalColumnCount}
-                        onDragOver={(e) => {
-                          const effectiveDraggedEmployeeId = resolveDraggedEmployeeId(e);
-                          if (!canDropInGroup || !effectiveDraggedEmployeeId) return;
-                          e.preventDefault();
-                          setDragTarget({ storeId: group.storeId, insertIndex: nextInsertIndex });
-                        }}
-                        onDrop={(e) => {
-                          void handleDropIntoStore(group.storeId, nextInsertIndex, e);
-                        }}
-                        className={`h-2 border-x border-gray-200 ${
-                          dragTarget?.storeId === group.storeId && dragTarget?.insertIndex === nextInsertIndex
-                            ? 'bg-[#ffe066]/70 outline outline-2 outline-[#FFD700]'
-                            : ''
-                        }`}
-                      />
-                    </tr>
-                  );
-                  const row = (
-                  <tr
-                    key={employee.id}
-                    draggable={canDragRow}
-                    onDragStart={(e) => {
-                      if (!canDragRow) return;
-                      onDragContextChange?.({ workerId: employee.id, sourceStoreId: group.storeId });
-                      e.dataTransfer.setData('application/x-employee-id', employee.id);
-                      e.dataTransfer.setData('text/plain', employee.id);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragEnd={() => {
-                      onDragContextChange?.({ workerId: null, sourceStoreId: null });
-                      setDragTarget(null);
-                    }}
-                    className={`transition-all ${isDraggingThisRow ? 'opacity-60' : ''}`}
-                    style={{ backgroundColor: group.rowBgColor }}
-                  >
+              {orderedEmployees.map((employee, rowIndex) => {
+                const workerCardBgColor = '#ffffff';
+                const rowBgColor = '#ffffff';
+                return (
+                  <tr key={employee.id} style={{ backgroundColor: rowBgColor }}>
                   <th
                     scope="row"
                     className="sticky left-0 z-30 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
                     style={{
-                      backgroundColor: group.rowBgColor,
+                      backgroundColor: workerCardBgColor,
                       backgroundClip: 'padding-box',
                     }}
                   >
-                    <div className="flex items-center gap-2">
-                      {canDragRow ? (
-                        <span
-                          className="inline-flex h-6 w-4 items-center justify-center rounded border border-blue-200 bg-blue-50 text-[10px] font-bold text-blue-700"
-                          title="Drag to reorder employee row"
-                          aria-label="Drag to reorder employee row"
+                    {employeeProfileBasePath ? (
+                      <Link
+                        href={`${employeeProfileBasePath}/${employee.id}`}
+                        className="underline decoration-gray-400 underline-offset-2 hover:decoration-gray-700"
+                      >
+                        {employee.name}
+                      </Link>
+                    ) : (
+                      employee.name
+                    )}
+                    {showPositionControls && !readOnly ? (
+                      <div className="mt-1 flex items-center gap-1 print:hidden">
+                        <button
+                          type="button"
+                          disabled={savingEmployeeOrder || rowIndex === 0}
+                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, 0)}
+                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
+                          title="Move to first position"
                         >
-                          ⋮⋮
-                        </span>
-                      ) : null}
-                      {employeeProfileBasePath ? (
-                        <Link
-                          href={`${employeeProfileBasePath}/${employee.id}`}
-                          className="underline decoration-gray-400 underline-offset-2 hover:decoration-gray-700"
+                          Top
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingEmployeeOrder || rowIndex === 0}
+                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, rowIndex - 1)}
+                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
+                          title="Move up"
                         >
-                          {employee.name}
-                        </Link>
-                      ) : (
-                        employee.name
-                      )}
-                    </div>
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingEmployeeOrder || rowIndex === orderedEmployees.length - 1}
+                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, rowIndex + 1)}
+                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingEmployeeOrder || rowIndex === orderedEmployees.length - 1}
+                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, orderedEmployees.length - 1)}
+                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
+                          title="Move to last position"
+                        >
+                          Bottom
+                        </button>
+                      </div>
+                    ) : null}
                   </th>
                   {(() => {
                     const employeeMonthTotal = weekSegments.reduce(
@@ -636,7 +481,7 @@ export default function PlannerGrid({
                             si < weekSegments.length - 1 &&
                             dayIndex === seg.days.length - 1
                           }
-                          rowBackgroundColor={group.rowBgColor}
+                          rowBackgroundColor={rowBgColor}
                           onActivate={() => {
                             if (!readOnly && !isVacation && !isUnavailable) setEditingKey(cellKey);
                           }}
@@ -672,32 +517,6 @@ export default function PlannerGrid({
                   })()}
                 </tr>
                 );
-                return [row, trailingGap];
-                });
-                const emptyStoreDropZone = group.employees.length === 0 ? (
-                  <tr key={`${group.key}-empty-drop`}>
-                    <td
-                      colSpan={totalColumnCount}
-                      onDragOver={(e) => {
-                        const effectiveDraggedEmployeeId = resolveDraggedEmployeeId(e);
-                        if (!canDropInGroup || !effectiveDraggedEmployeeId) return;
-                        e.preventDefault();
-                        setDragTarget({ storeId: group.storeId, insertIndex: 0 });
-                      }}
-                      onDrop={(e) => {
-                        void handleDropIntoStore(group.storeId, 0, e);
-                      }}
-                      className={`min-h-[80px] border-2 border-dashed text-center text-xs font-semibold ${
-                        dragTarget?.storeId === group.storeId && dragTarget?.insertIndex === 0
-                          ? 'border-[#FFD700] bg-[#ffe066]/35 text-[#7a5a00]'
-                          : 'border-[#FFD700]/60 bg-[#fff9db] text-[#9a7a00]'
-                      }`}
-                    >
-                      Drop worker here
-                    </td>
-                  </tr>
-                ) : null;
-                return [groupHeader, leadGap, emptyStoreDropZone, ...rows];
               })}
             </tbody>
           </table>
