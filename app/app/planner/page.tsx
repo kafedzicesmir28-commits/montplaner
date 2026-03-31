@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import { Employee, Store, Shift, ShiftAssignment, Vacation } from '@/types/database';
-import { getDaysInMonth, formatDate, getPrintWeekDays } from '@/lib/utils';
+import { getDaysInMonth, formatDate } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerGrid from '@/components/PlannerGrid';
 import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
@@ -17,6 +17,54 @@ type PlannerAssignmentRow = ShiftAssignment & {
   assignment_type?: 'SHIFT' | 'FREI' | 'KRANK' | 'FERIEN';
 };
 
+function startOfISOWeek(date: Date): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - day);
+  return d;
+}
+
+function endOfISOWeek(date: Date): Date {
+  const d = startOfISOWeek(date);
+  d.setDate(d.getDate() + 6);
+  return d;
+}
+
+function addDays(date: Date, daysToAdd: number): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + daysToAdd);
+  return d;
+}
+
+function getISOWeek(date: Date): number {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return (
+    1 +
+    Math.round(
+      ((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+    )
+  );
+}
+
+function getISOWeekYear(date: Date): number {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  return d.getFullYear();
+}
+
+function startOfISOWeekFromYearWeek(weekYear: number, weekNumber: number): Date {
+  const jan4 = new Date(weekYear, 0, 4);
+  const jan4WeekStart = startOfISOWeek(jan4);
+  return addDays(jan4WeekStart, (weekNumber - 1) * 7);
+}
+
+function getISOWeeksInYear(year: number): number {
+  const dec28 = new Date(year, 11, 28);
+  return getISOWeek(dec28);
+}
+
 export default function PlannerPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -26,26 +74,109 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [storesLoaded, setStoresLoaded] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [printWeeks, setPrintWeeks] = useState<0 | 1 | 2>(0);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedWeekA, setSelectedWeekA] = useState<string>('');
+  const [selectedWeekB, setSelectedWeekB] = useState<string>('');
+  const [printSelection, setPrintSelection] = useState<{ weekA: string; weekB: string } | null>(null);
+  const [printScale, setPrintScale] = useState(1);
   const [pendingStoreByKey, setPendingStoreByKey] = useState<Record<string, string>>({});
+  const [savingEmployeeOrder, setSavingEmployeeOrder] = useState(false);
+  const [dragContext, setDragContext] = useState<{ workerId: string | null; sourceStoreId: string | null }>({
+    workerId: null,
+    sourceStoreId: null,
+  });
+  const printRootRef = useRef<HTMLDivElement>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const days = getDaysInMonth(year, month);
 
+  const activeWeekMeta = useMemo(() => {
+    const today = new Date();
+    const anchorDate =
+      today.getFullYear() === year && today.getMonth() === month
+        ? today
+        : new Date(year, month, 1);
+    return {
+      week: getISOWeek(anchorDate),
+      weekYear: getISOWeekYear(anchorDate),
+    };
+  }, [year, month]);
+
+  const printWeekOptions = useMemo(() => {
+    const totalWeeks = getISOWeeksInYear(activeWeekMeta.weekYear);
+    return Array.from({ length: totalWeeks }, (_, idx) => {
+      const week = idx + 1;
+      const id = `${activeWeekMeta.weekYear}-W${String(week).padStart(2, '0')}`;
+      return { id, label: `KW${week}` };
+    });
+  }, [activeWeekMeta.weekYear]);
+
+  const defaultWeekSelection = useMemo(() => {
+    const totalWeeks = getISOWeeksInYear(activeWeekMeta.weekYear);
+    const first = activeWeekMeta.week;
+    const second = first < totalWeeks ? first + 1 : Math.max(1, first - 1);
+    return {
+      weekA: `${activeWeekMeta.weekYear}-W${String(first).padStart(2, '0')}`,
+      weekB: `${activeWeekMeta.weekYear}-W${String(second).padStart(2, '0')}`,
+    };
+  }, [activeWeekMeta.week, activeWeekMeta.weekYear]);
+
   const printDays = useMemo(() => {
-    if (printWeeks === 0) return [];
-    return getPrintWeekDays(days, printWeeks === 1 ? 1 : 2);
-  }, [days, printWeeks]);
+    if (!printSelection) return [];
+    const toWeekStart = (weekId: string) => {
+      const [weekYearPart, weekPart] = weekId.split('-W');
+      const weekYear = Number(weekYearPart);
+      const weekNumber = Number(weekPart);
+      if (!Number.isFinite(weekYear) || !Number.isFinite(weekNumber)) return null;
+      return startOfISOWeekFromYearWeek(weekYear, weekNumber);
+    };
+    const firstStart = toWeekStart(printSelection.weekA);
+    const secondStart = toWeekStart(printSelection.weekB);
+    if (!firstStart || !secondStart) return [];
+    const firstWeekDays = Array.from({ length: 7 }, (_, idx) => addDays(firstStart, idx));
+    const secondWeekDays = Array.from({ length: 7 }, (_, idx) => addDays(secondStart, idx));
+    return [...firstWeekDays, ...secondWeekDays];
+  }, [printSelection]);
+
+  const selectedWeeksAreValid =
+    selectedWeekA !== '' &&
+    selectedWeekB !== '' &&
+    selectedWeekA !== selectedWeekB &&
+    printWeekOptions.some((opt) => opt.id === selectedWeekA) &&
+    printWeekOptions.some((opt) => opt.id === selectedWeekB);
 
   useEffect(() => {
-    if (printWeeks === 0 || printDays.length === 0) return;
-    const id = window.setTimeout(() => window.print(), 150);
+    if (!printSelection || printDays.length === 0) return;
+    const id = window.setTimeout(() => {
+      const mmToPx = (mm: number) => (mm / 25.4) * 96;
+      const pageWidthPx = mmToPx(297); // A4 landscape width
+      const pageHeightPx = mmToPx(210); // A4 landscape height
+      const marginPx = mmToPx(16); // 8mm each side => 16mm total
+      const availableWidth = pageWidthPx - marginPx;
+      const availableHeight = pageHeightPx - marginPx;
+      const content = printRootRef.current;
+      if (content) {
+        const contentWidth = Math.max(content.scrollWidth, content.offsetWidth, 1);
+        const contentHeight = Math.max(content.scrollHeight, content.offsetHeight, 1);
+        const fitScale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
+        setPrintScale(Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 0.85);
+      } else {
+        setPrintScale(0.85);
+      }
+      window.scrollTo(0, 0);
+      document.body.style.height = 'auto';
+      window.setTimeout(() => window.print(), 120);
+    }, 120);
     return () => window.clearTimeout(id);
-  }, [printWeeks, printDays.length]);
+  }, [printSelection, printDays.length]);
 
   useEffect(() => {
-    const onAfterPrint = () => setPrintWeeks(0);
+    const onAfterPrint = () => {
+      setPrintSelection(null);
+      setPrintScale(1);
+      document.body.style.height = '';
+    };
     window.addEventListener('afterprint', onAfterPrint);
     return () => window.removeEventListener('afterprint', onAfterPrint);
   }, []);
@@ -81,7 +212,11 @@ export default function PlannerPage() {
     }
     try {
       const [employeesRes, storesRes, shiftsRes, assignmentsRes, vacationsRes] = await Promise.all([
-        supabase.from('employees').select('*').order('name'),
+        supabase
+          .from('employees')
+          .select('*')
+          .order('sort_order', { ascending: true, nullsFirst: false })
+          .order('name', { ascending: true }),
         supabase.from('stores').select('id,name,color').order('name'),
         supabase.from('shifts').select('*').order('start_time'),
         supabase
@@ -94,13 +229,13 @@ export default function PlannerPage() {
               color
             )
           `)
-          .gte('date', formatDate(new Date(year, month, 1)))
-          .lte('date', formatDate(new Date(year, month + 1, 0))),
+          .gte('date', formatDate(startOfISOWeek(new Date(year, month, 1))))
+          .lte('date', formatDate(endOfISOWeek(new Date(year, month + 1, 0)))),
         supabase
           .from('vacations')
           .select('*')
-          .lte('start_date', formatDate(new Date(year, month + 1, 0)))
-          .gte('end_date', formatDate(new Date(year, month, 1))),
+          .lte('start_date', formatDate(endOfISOWeek(new Date(year, month + 1, 0))))
+          .gte('end_date', formatDate(startOfISOWeek(new Date(year, month, 1)))),
       ]);
 
       if (employeesRes.error) throw employeesRes.error;
@@ -189,6 +324,97 @@ export default function PlannerPage() {
     }
   }, [fetchAllData]);
 
+  const persistEmployeeOrder = useCallback(async (reordered: Employee[]) => {
+    setEmployees(reordered);
+    setSavingEmployeeOrder(true);
+    try {
+      const updates = reordered.map((employee, index) =>
+        supabase
+          .from('employees')
+          .update({ sort_order: index + 1, store_id: employee.store_id ?? null })
+          .eq('id', employee.id)
+      );
+      const results = await Promise.all(updates);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Failed to save employee order';
+      alert(message);
+      await fetchAllData({ preserveView: true });
+    } finally {
+      setSavingEmployeeOrder(false);
+    }
+  }, [fetchAllData]);
+
+  const handleEmployeeReorder = useCallback(async (
+    employeeId: string,
+    targetStoreId: string | null,
+    targetIndexInStore: number
+  ) => {
+    if (savingEmployeeOrder) return;
+    const sourceEmployee = employees.find((e) => e.id === employeeId);
+    if (!sourceEmployee) return;
+
+    const normalizedTargetStoreId = targetStoreId ?? null;
+    const orderByStore = new Map<string | null, Employee[]>();
+    const storeOrder = [...stores.map((s) => s.id), null];
+    for (const storeId of storeOrder) {
+      orderByStore.set(storeId, []);
+    }
+    for (const employee of employees) {
+      const sid = employee.store_id ?? null;
+      if (!orderByStore.has(sid)) orderByStore.set(sid, []);
+      orderByStore.get(sid)!.push(employee);
+    }
+
+    // Worker movement must NEVER depend on source store.
+    // Movement is always remove-from-all + insert-into-target.
+    const movedWorker = sourceEmployee;
+    for (const [sid, list] of orderByStore.entries()) {
+      orderByStore.set(
+        sid,
+        list.filter((e) => e.id !== employeeId)
+      );
+    }
+
+    const targetList = [...(orderByStore.get(normalizedTargetStoreId) ?? [])];
+    const insertAt = Math.max(0, Math.min(targetIndexInStore, targetList.length));
+    targetList.splice(insertAt, 0, { ...movedWorker, store_id: normalizedTargetStoreId });
+    orderByStore.set(normalizedTargetStoreId, targetList);
+
+    const rebuilt: Employee[] = [];
+    for (const sid of storeOrder) {
+      rebuilt.push(...(orderByStore.get(sid) ?? []));
+    }
+    for (const [sid, list] of orderByStore.entries()) {
+      if (!storeOrder.includes(sid)) rebuilt.push(...list);
+    }
+
+    console.log('SAFE MOVE', {
+      worker: movedWorker.name,
+      from: movedWorker.store_id ?? 'unassigned',
+      to: normalizedTargetStoreId ?? 'unassigned',
+    });
+    await persistEmployeeOrder(rebuilt);
+  }, [employees, persistEmployeeOrder, savingEmployeeOrder, stores]);
+
+  const openPrintModal = useCallback(() => {
+    const base = printSelection ?? defaultWeekSelection;
+    setSelectedWeekA(base.weekA);
+    setSelectedWeekB(base.weekB);
+    setIsPrintModalOpen(true);
+  }, [defaultWeekSelection, printSelection]);
+
+  const closePrintModal = useCallback(() => {
+    setIsPrintModalOpen(false);
+  }, []);
+
+  const confirmPrintSelection = useCallback(() => {
+    if (!selectedWeeksAreValid) return;
+    setPrintSelection({ weekA: selectedWeekA, weekB: selectedWeekB });
+    setIsPrintModalOpen(false);
+  }, [selectedWeekA, selectedWeekB, selectedWeeksAreValid]);
+
   if (loading || !storesLoaded) {
     return (
       <AuthGuard>
@@ -222,17 +448,10 @@ export default function PlannerPage() {
             </button>
             <button
               type="button"
-              onClick={() => setPrintWeeks(1)}
+              onClick={openPrintModal}
               className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
             >
-              {t.printOneWeek}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPrintWeeks(2)}
-              className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              {t.printTwoWeeks}
+              Print 2 Weeks
             </button>
           </>
         }
@@ -311,30 +530,159 @@ export default function PlannerPage() {
             onStoreDrop={handleStoreDrop}
             onStatusDrop={handleStatusDrop}
             storesLoaded={storesLoaded}
+            enableEmployeeRowDrag
+            savingEmployeeOrder={savingEmployeeOrder}
+            onEmployeeReorder={handleEmployeeReorder}
+            dragContext={dragContext}
+            onDragContextChange={setDragContext}
           />
         </div>
 
-        {printWeeks > 0 && printDays.length > 0 ? (
-          <div className="hidden print:block planner-print-area space-y-3">
-            <div className="text-center">
-              <h1 className="text-lg font-bold text-gray-900">
-                {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                {printWeeks === 1 ? ' (1 Woche / 1 sedmica)' : ' (2 Wochen / 2 sedmice)'}
-              </h1>
+        {isPrintModalOpen ? (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 print:hidden">
+            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl">
+              <h3 className="text-base font-semibold text-gray-900">Select weeks to print</h3>
+              <div className="mt-3 space-y-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  First week
+                  <select
+                    value={selectedWeekA}
+                    onChange={(e) => setSelectedWeekA(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                  >
+                    {printWeekOptions.map((opt) => (
+                      <option key={`a-${opt.id}`} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Second week
+                  <select
+                    value={selectedWeekB}
+                    onChange={(e) => setSelectedWeekB(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                  >
+                    {printWeekOptions.map((opt) => (
+                      <option key={`b-${opt.id}`} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedWeekA === selectedWeekB ? (
+                  <p className="text-xs font-medium text-red-600">Please select two different weeks.</p>
+                ) : null}
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePrintModal}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPrintSelection}
+                  disabled={!selectedWeeksAreValid}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Print
+                </button>
+              </div>
             </div>
-            <PlannerGrid
-              employees={employees}
-              days={printDays}
-              assignments={assignments}
-              vacations={vacations}
-              stores={stores}
-              shifts={shifts}
-              onAssignmentsUpdated={() => fetchAllData({ preserveView: true })}
-              printWeeklyTotals
-              storesLoaded={storesLoaded}
-            />
           </div>
         ) : null}
+
+        {printSelection && printDays.length > 0 ? (
+          <div
+            id="print-scale-wrapper"
+            className="hidden print:block"
+            style={{
+              transform: `scale(${printScale})`,
+              transformOrigin: 'top left',
+              width: `${100 / Math.max(printScale, 0.01)}%`,
+            }}
+          >
+            <div id="planner-print-root" ref={printRootRef} className="space-y-3">
+              <div className="text-center">
+                <h1 className="text-lg font-bold text-gray-900">
+                  {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  {' '}
+                  ({printSelection.weekA.replace('-', ' ')} + {printSelection.weekB.replace('-', ' ')})
+                </h1>
+              </div>
+              <PlannerGrid
+                employees={employees}
+                days={printDays}
+                assignments={assignments}
+                vacations={vacations}
+                stores={stores}
+                shifts={shifts}
+                onAssignmentsUpdated={() => fetchAllData({ preserveView: true })}
+                printWeeklyTotals
+                readOnly
+                storesLoaded={storesLoaded}
+              />
+            </div>
+          </div>
+        ) : null}
+        <style jsx global>{`
+          @media print {
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+
+            body * {
+              visibility: hidden !important;
+            }
+
+            #planner-print-root,
+            #planner-print-root * {
+              visibility: visible !important;
+            }
+
+            #planner-print-root {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              page-break-before: avoid;
+              page-break-after: avoid;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+
+            #planner-print-root .overflow-x-auto {
+              overflow: visible !important;
+            }
+
+            #planner-print-root table {
+              width: 100% !important;
+            }
+
+            html,
+            body {
+              height: auto !important;
+              overflow: hidden !important;
+            }
+
+            #print-scale-wrapper {
+              position: absolute;
+              top: 0;
+              left: 0;
+              transform-origin: top left !important;
+            }
+
+            @page {
+              size: A4 landscape;
+              margin: 8mm;
+            }
+          }
+        `}</style>
       </Layout>
     </AuthGuard>
   );

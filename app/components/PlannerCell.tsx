@@ -172,6 +172,7 @@ export type PlannerCellProps = {
   onStatusDrop?: (employeeId: string, dateStr: string, statusType: 'FREI' | 'KRANK' | 'FERIEN') => void;
   isEditing: boolean;
   readOnly?: boolean;
+  weekDividerRight?: boolean;
   /** Optional store-section row tint applied to the cell background only. */
   rowBackgroundColor?: string;
   onActivate: () => void;
@@ -200,6 +201,7 @@ export default function PlannerCell({
   onStatusDrop,
   isEditing,
   readOnly = false,
+  weekDividerRight = false,
   rowBackgroundColor,
   onActivate,
   onSaved,
@@ -593,7 +595,12 @@ export default function PlannerCell({
       style={{
         backgroundColor: rowBackgroundColor ?? '#ffffff',
         color: '#111827',
-        border: `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
+        borderTop: `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
+        borderLeft: `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
+        borderBottom: `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
+        borderRight: weekDividerRight
+          ? '4px solid #FFD700'
+          : `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
         minWidth: editorMinWidth ?? 96,
         maxWidth: isEditing ? 200 : 122,
         minHeight: 72,
@@ -842,9 +849,6 @@ export default function PlannerCell({
             className="flex min-h-[56px] flex-col items-center justify-center gap-0 rounded-md px-1 py-0.5 text-center text-[10px] font-medium leading-tight"
             style={cardStyle}
           >
-            <div className="max-w-full truncate font-medium" title={storeName}>
-              {resolvedStoreName || storeName || '—'}
-            </div>
             <div className="max-w-full truncate font-semibold tracking-tight" title={code}>
               {code || '—'}
             </div>
