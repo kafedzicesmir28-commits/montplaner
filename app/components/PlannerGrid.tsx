@@ -171,6 +171,7 @@ export default function PlannerGrid({
 }: PlannerGridProps) {
   const weekSegments = useMemo(() => segmentDaysByISOWeek(days), [days]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [positionInputByEmployee, setPositionInputByEmployee] = useState<Record<string, string>>({});
   const gridRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const bottomScrollRef = useRef<HTMLDivElement>(null);
@@ -208,6 +209,13 @@ export default function PlannerGrid({
       return a.name.localeCompare(b.name);
     });
   }, [visibleEmployees]);
+  const commitPositionEdit = useCallback(async (employeeId: string) => {
+    const raw = positionInputByEmployee[employeeId];
+    const parsed = Number.parseInt(raw ?? '', 10);
+    if (!Number.isFinite(parsed)) return;
+    const bounded = Math.max(1, Math.min(parsed, orderedEmployees.length));
+    await onMoveEmployeeToPosition?.(employeeId, bounded - 1);
+  }, [onMoveEmployeeToPosition, orderedEmployees.length, positionInputByEmployee]);
 
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
@@ -298,7 +306,16 @@ export default function PlannerGrid({
                 <th
                   scope="col"
                   rowSpan={2}
-                  className="sticky left-0 top-0 z-30 border border-gray-200 border-r border-gray-200 bg-white px-2 py-1.5 align-middle text-left text-[11px] font-bold uppercase tracking-wide text-gray-700"
+                  className="sticky left-0 top-0 z-30 border border-gray-200 border-r border-gray-200 bg-white px-2 py-1.5 align-middle text-center text-[11px] font-bold uppercase tracking-wide text-gray-700"
+                  style={{ minWidth: 44, width: 44 }}
+                >
+                  #
+                </th>
+                <th
+                  scope="col"
+                  rowSpan={2}
+                  className="sticky top-0 z-30 border border-gray-200 border-r border-gray-200 bg-white px-2 py-1.5 align-middle text-left text-[11px] font-bold uppercase tracking-wide text-gray-700"
+                  style={{ left: 44, minWidth: 132 }}
                 >
                   {t.employee}
                 </th>
@@ -367,14 +384,56 @@ export default function PlannerGrid({
             <tbody>
               {orderedEmployees.map((employee, rowIndex) => {
                 const workerCardBgColor = '#ffffff';
-                const rowBgColor = '#ffffff';
+                const rowBgColor = rowIndex % 2 === 0 ? '#FFFFFF' : '#E6F0FF';
+                const displayedPosition = rowIndex + 1;
                 return (
                   <tr key={employee.id} style={{ backgroundColor: rowBgColor }}>
                   <th
                     scope="row"
-                    className="sticky left-0 z-30 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
+                    className="sticky left-0 z-30 border border-gray-200 border-r border-gray-200 px-1 py-1 text-center text-[12px] font-semibold text-gray-900"
                     style={{
-                      backgroundColor: workerCardBgColor,
+                      backgroundColor: rowBgColor,
+                      backgroundClip: 'padding-box',
+                      minWidth: 44,
+                      width: 44,
+                    }}
+                  >
+                    <input
+                      type="number"
+                      min={1}
+                      max={orderedEmployees.length}
+                      value={positionInputByEmployee[employee.id] ?? String(displayedPosition)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setPositionInputByEmployee((prev) => ({ ...prev, [employee.id]: next }));
+                      }}
+                      onFocus={() => {
+                        setPositionInputByEmployee((prev) => ({ ...prev, [employee.id]: String(displayedPosition) }));
+                      }}
+                      onBlur={() => {
+                        void commitPositionEdit(employee.id);
+                        setPositionInputByEmployee((prev) => {
+                          const next = { ...prev };
+                          delete next[employee.id];
+                          return next;
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void commitPositionEdit(employee.id);
+                          (e.currentTarget as HTMLInputElement).blur();
+                        }
+                      }}
+                      className="w-full rounded border border-gray-300 bg-white px-1 py-0.5 text-center text-[11px] font-semibold text-gray-800"
+                    />
+                  </th>
+                  <th
+                    scope="row"
+                    className="sticky z-30 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
+                    style={{
+                      left: 44,
+                      backgroundColor: workerCardBgColor === '#ffffff' ? rowBgColor : workerCardBgColor,
                       backgroundClip: 'padding-box',
                     }}
                   >
@@ -496,7 +555,7 @@ export default function PlannerGrid({
                         <td
                           key={`${employee.id}-wsum-${seg.weekYear}-${seg.weekNumber}-${si}`}
                           className="border border-gray-200 bg-gray-100 px-2 py-1 text-right text-[11px] font-semibold tabular-nums text-gray-800"
-                          style={{ borderRight: '4px solid #FFD700' }}
+                          style={{ borderRight: '4px solid #FFD700', backgroundColor: rowBgColor }}
                         >
                           {formatWorkHoursDisplay(weekTotal)}
                         </td>
@@ -507,6 +566,7 @@ export default function PlannerGrid({
                         <td
                           key={`${employee.id}-msum`}
                           className="border border-gray-200 bg-blue-50 px-2 py-1 text-right text-[11px] font-bold tabular-nums text-blue-900"
+                          style={{ backgroundColor: rowBgColor }}
                         >
                           {formatWorkHoursDisplay(employeeMonthTotal)}
                         </td>

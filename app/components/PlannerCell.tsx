@@ -106,47 +106,22 @@ function toDbTime(hhmm: string): string | null {
   return `${h}:${min}:00`;
 }
 
-/** Normalize "H:mm" or "HH:mm" to "HH:mm" or null if invalid clock. */
-function normalizeHhMmPart(s: string): string | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
-  if (!m) return null;
-  const h = parseInt(m[1]!, 10);
-  const min = parseInt(m[2]!, 10);
-  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-}
-
-/**
- * Parse manual range "HH:mm – HH:mm" (hyphen, en dash, or em dash between times).
- */
-function parseCustomRange(input: string): { start: string; end: string } | null {
-  const t = input.trim();
-  if (!t) return null;
-  const m = /^(\d{1,2}:\d{2})\s*(?:-|–|—|→|->)\s*(\d{1,2}:\d{2})\s*$/u.exec(t);
-  if (!m) return null;
-  const start = normalizeHhMmPart(m[1]!);
-  const end = normalizeHhMmPart(m[2]!);
-  if (!start || !end) return null;
-  return { start, end };
-}
-
-function formatCustomRangeFromDb(
-  customStart: string | null | undefined,
-  customEnd: string | null | undefined
-): string {
-  if (customStart == null || customEnd == null || customStart === '' || customEnd === '') return '';
-  return `${formatClock(String(customStart))} – ${formatClock(String(customEnd))}`;
-}
-
-function shiftDefaultRangeLabel(shift: Shift | undefined): string {
-  if (!shift) return 'HH:mm – HH:mm';
-  return `${formatClock(shift.start_time)} – ${formatClock(shift.end_time)}`;
-}
-
 function hhmmFromShiftTime(value: string | null | undefined): string {
   if (!value) return '';
   return String(value).split(':').slice(0, 2).join(':');
 }
+
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+const TIME_OPTIONS = Array.from({ length: 144 }, (_, i) => {
+  const total = i * 10;
+  const h = String(Math.floor(total / 60)).padStart(2, '0');
+  const m = String(total % 60).padStart(2, '0');
+  return `${h}:${m}`;
+});
 
 function shiftAllowedForStore(shift: Shift, storeId: string): boolean {
   return !Boolean(shift.is_global) && shift.store_id === storeId;
@@ -225,15 +200,11 @@ export default function PlannerCell({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingDroppedStoreId, setPendingDroppedStoreId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-
-  const skipPersistRef = useRef(true);
-  const dirtyRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTimeSelectRef = useRef<HTMLSelectElement | null>(null);
+  const endTimeSelectRef = useRef<HTMLSelectElement | null>(null);
 
   useEffect(() => {
     if (!isEditing) return;
-    skipPersistRef.current = true;
-    dirtyRef.current = false;
     setShiftId(assignment?.shift_id ?? '');
     const nextStoreId = forceStoreId ?? pendingStoreId ?? pendingDroppedStoreId ?? assignment?.store_id ?? '';
     setStoreId(nextStoreId);
@@ -267,6 +238,18 @@ export default function PlannerCell({
   ]);
 
   useEffect(() => {
+    if (!isEditing) return;
+    const id = window.requestAnimationFrame(() => {
+      startTimeSelectRef.current?.focus();
+      const startSelected = startTimeSelectRef.current?.selectedOptions?.[0];
+      const endSelected = endTimeSelectRef.current?.selectedOptions?.[0];
+      startSelected?.scrollIntoView({ block: 'center' });
+      endSelected?.scrollIntoView({ block: 'center' });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [isEditing, customStart, customEnd]);
+
+  useEffect(() => {
     if (!forceStoreId) return;
     setStoreId(forceStoreId);
   }, [forceStoreId]);
@@ -288,7 +271,7 @@ export default function PlannerCell({
     if (!valid) setShiftId('');
   }, [isEditing, shiftId, availableShifts]);
 
-  const persist = useCallback(async () => {
+  const persist = useCallback(async (closeAfterSave = false) => {
     const effectiveStoreId = forceStoreId ?? storeId;
     if (isVacation) return;
     if (assignmentType !== 'SHIFT') return;
@@ -302,9 +285,13 @@ export default function PlannerCell({
       custom_start_time: null,
       custom_end_time: null,
     };
-    const normalizedStart = normalizeHhMmPart(customStart);
-    const normalizedEnd = normalizeHhMmPart(customEnd);
+    const normalizedStart = customStart;
+    const normalizedEnd = customEnd;
     if (normalizedStart && normalizedEnd) {
+      if (toMinutes(normalizedEnd) <= toMinutes(normalizedStart)) {
+        setSaveError('End time must be after start time.');
+        return;
+      }
       const selectedShift = shifts.find((s) => s.id === shiftId);
       const selectedDefaultStart = selectedShift ? hhmmFromShiftTime(selectedShift.start_time) : '';
       const selectedDefaultEnd = selectedShift ? hhmmFromShiftTime(selectedShift.end_time) : '';
@@ -353,7 +340,7 @@ export default function PlannerCell({
       }
       await onSaved();
       notifyPlannerAssignmentsChanged();
-      dirtyRef.current = false;
+      if (closeAfterSave) onCloseCellEdit?.();
     } catch (e: unknown) {
       const msg = formatErrorMessage(e);
       setSaveError(msg);
@@ -376,6 +363,7 @@ export default function PlannerCell({
     onSaved,
     isVacation,
     assignmentType,
+    onCloseCellEdit,
   ]);
 
   const applyShiftQuick = useCallback(async (nextShiftId: string) => {
@@ -416,7 +404,6 @@ export default function PlannerCell({
 
       await onSaved();
       notifyPlannerAssignmentsChanged();
-      dirtyRef.current = false;
       onCloseCellEdit?.();
     } catch (e: unknown) {
       const msg = formatErrorMessage(e);
@@ -436,34 +423,6 @@ export default function PlannerCell({
     onSaved,
     onCloseCellEdit,
   ]);
-
-  useEffect(() => {
-    if (!isEditing) return;
-
-    if (skipPersistRef.current) {
-      skipPersistRef.current = false;
-      return;
-    }
-
-    if (!shiftId || !(forceStoreId ?? storeId)) return;
-    dirtyRef.current = true;
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      void persist();
-    }, 450);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [shiftId, storeId, forceStoreId, customStart, customEnd, breakMinutes, isEditing, persist]);
-
-  useEffect(() => {
-    if (isEditing) return;
-    if (!dirtyRef.current) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    void persist();
-  }, [isEditing, persist]);
 
   const handleClear = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -490,6 +449,35 @@ export default function PlannerCell({
       setSaving(false);
     }
   };
+
+  const handleDeleteCustomOverride = useCallback(async () => {
+    if (!assignment) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const { error } = await supabase
+        .from('shift_assignments')
+        .update({
+          custom_start_time: null,
+          custom_end_time: null,
+        })
+        .eq('id', assignment.id);
+      if (error) throw error;
+      const defaultStart = shift ? hhmmFromShiftTime(shift.start_time) : '00:00';
+      const defaultEnd = shift ? hhmmFromShiftTime(shift.end_time) : '00:15';
+      setCustomStart(defaultStart);
+      setCustomEnd(defaultEnd);
+      await onSaved();
+      notifyPlannerAssignmentsChanged();
+      onCloseCellEdit?.();
+    } catch (err: unknown) {
+      const msg = formatErrorMessage(err);
+      setSaveError(msg);
+      console.error('PlannerCell clear custom override:', msg, err);
+    } finally {
+      setSaving(false);
+    }
+  }, [assignment, onCloseCellEdit, onSaved, shift]);
 
   let backgroundColor: string;
   let color: string;
@@ -784,34 +772,36 @@ export default function PlannerCell({
                   ))}
                 </select>
               )}
-              <input
-                type="text"
+              <label className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">
+                Start Time
+              </label>
+              <select
+                ref={startTimeSelectRef}
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                onBlur={(e) => {
-                  const normalized = normalizeHhMmPart(e.target.value);
-                  if (normalized) setCustomStart(normalized);
-                }}
-                inputMode="numeric"
-                placeholder="HH:mm"
-                maxLength={5}
                 className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
-                title="Manual start time in 24h format (HH:mm)"
-              />
-              <input
-                type="text"
+              >
+                {TIME_OPTIONS.map((time) => (
+                  <option key={`start-${time}`} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
+              <label className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">
+                End Time
+              </label>
+              <select
+                ref={endTimeSelectRef}
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                onBlur={(e) => {
-                  const normalized = normalizeHhMmPart(e.target.value);
-                  if (normalized) setCustomEnd(normalized);
-                }}
-                inputMode="numeric"
-                placeholder="HH:mm"
-                maxLength={5}
                 className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
-                title="Manual end time in 24h format (HH:mm)"
-              />
+              >
+                {TIME_OPTIONS.map((time) => (
+                  <option key={`end-${time}`} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
               <div className="mb-0.5">
                 <span className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">{t.plannerBreakSelect}</span>
                 <select
@@ -829,16 +819,26 @@ export default function PlannerCell({
               </div>
             </>
           ) : null}
-          {assignment ? (
+          <div className="mt-0.5 flex items-center gap-1">
             <button
               type="button"
-              onClick={handleClear}
+              onClick={() => void persist(true)}
               disabled={saving}
-              className="w-full rounded border border-red-300 bg-red-50 py-0.5 text-[8px] font-semibold text-red-800 hover:bg-red-100"
+              className="flex-1 rounded border border-blue-300 bg-blue-50 py-0.5 text-[8px] font-semibold text-blue-800 hover:bg-blue-100"
             >
-              {t.deleteAssignment}
+              Save
             </button>
-          ) : null}
+            {assignment ? (
+              <button
+                type="button"
+                onClick={() => void handleDeleteCustomOverride()}
+                disabled={saving}
+                className="flex-1 rounded border border-red-300 bg-red-50 py-0.5 text-[8px] font-semibold text-red-800 hover:bg-red-100"
+              >
+                Delete
+              </button>
+            ) : null}
+          </div>
           {saveError ? <div className="mt-0.5 text-[8px] text-red-700">{saveError}</div> : null}
         </div>
       ) : assignment && shift ? (
