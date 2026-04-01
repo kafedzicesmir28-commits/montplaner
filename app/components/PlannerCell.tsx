@@ -76,6 +76,13 @@ function contrastingForeground(bgHex: string): string {
   return L > 0.55 ? '#111827' : '#fafafa';
 }
 
+function foregroundForPicker(bgHex: string): string {
+  const rgb = hexToRgb(bgHex);
+  if (!rgb) return '#000000';
+  const L = relativeLuminance(rgb.r, rgb.g, rgb.b);
+  return L < 0.2 ? '#ffffff' : '#000000';
+}
+
 function formatClock(value: string): string {
   const part = value.split(':').slice(0, 2);
   if (part.length < 2) return value;
@@ -718,7 +725,7 @@ export default function PlannerCell({
                     key={s.id}
                     type="button"
                     onClick={() => {
-                      setShiftId(s.id);
+                      void applyShiftQuick(s.id);
                     }}
                     disabled={saving}
                     autoFocus={idx === 0}
@@ -727,30 +734,16 @@ export default function PlannerCell({
                       backgroundColor:
                         shiftId === s.id ? selectedStoreColor : withAlpha(selectedStoreColor, 0.2),
                       border: `1px solid ${selectedStoreColor}`,
-                      color: shiftId === s.id ? contrastingForeground(selectedStoreColor) : '#1f2937',
+                      color: shiftId === s.id ? foregroundForPicker(selectedStoreColor) : '#000000',
                       transform: shiftId === s.id ? 'scale(1.02)' : undefined,
                     }}
                   >
                     <div className="truncate text-[11px] font-semibold">{s.name}</div>
-                    <div className="text-[10px]">{formatClock(s.start_time)} - {formatClock(s.end_time)}</div>
-                    <div className="text-[10px]">Break: {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}m</div>
+                    <div className="text-[10px] font-medium">{formatClock(s.start_time)} - {formatClock(s.end_time)}</div>
+                    <div className="text-[10px] font-medium">Break: {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}m</div>
                   </button>
                 ))
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!shiftId && availableShifts.length > 0) {
-                    setShiftId(availableShifts[0]!.id);
-                  }
-                  void persist(true);
-                }}
-                disabled={saving || availableShifts.length === 0}
-                className="mt-1 h-10 rounded-md px-4 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ backgroundColor: selectedStoreColor }}
-              >
-                Save
-              </button>
             </div>
           ) : (
             <select
@@ -849,26 +842,28 @@ export default function PlannerCell({
               </div>
             </>
           ) : null}
-          <div className="mt-0.5 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => void persist(true)}
-              disabled={saving}
-              className="flex-1 rounded border border-blue-300 bg-blue-50 py-0.5 text-[8px] font-semibold text-blue-800 hover:bg-blue-100"
-            >
-              Save
-            </button>
-            {assignment ? (
+          {!simplifiedShiftOnlyMode ? (
+            <div className="mt-0.5 flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => void handleDeleteCustomOverride()}
+                onClick={() => void persist(true)}
                 disabled={saving}
-                className="flex-1 rounded border border-red-300 bg-red-50 py-0.5 text-[8px] font-semibold text-red-800 hover:bg-red-100"
+                className="flex-1 rounded border border-blue-300 bg-blue-50 py-0.5 text-[8px] font-semibold text-blue-800 hover:bg-blue-100"
               >
-                Delete
+                Save
               </button>
-            ) : null}
-          </div>
+              {assignment ? (
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteCustomOverride()}
+                  disabled={saving}
+                  className="flex-1 rounded border border-red-300 bg-red-50 py-0.5 text-[8px] font-semibold text-red-800 hover:bg-red-100"
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {saveError ? <div className="mt-0.5 text-[8px] text-red-700">{saveError}</div> : null}
         </div>
       ) : assignment && shift ? (
