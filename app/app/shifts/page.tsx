@@ -64,6 +64,14 @@ export default function ShiftsPage() {
     fetchShifts();
   }, []);
 
+  useEffect(() => {
+    const onStoresUpdated = () => {
+      void fetchShifts();
+    };
+    window.addEventListener('stores:colors-updated', onStoresUpdated as EventListener);
+    return () => window.removeEventListener('stores:colors-updated', onStoresUpdated as EventListener);
+  }, []);
+
   const fetchShifts = async () => {
     try {
       const [shiftsRes, storesRes] = await Promise.all([

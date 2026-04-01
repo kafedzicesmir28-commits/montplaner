@@ -243,22 +243,13 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
     const margin = 6;
     const usableW = pageW - margin * 2;
     const usableH = pageH - margin * 2;
-    const scale = Math.min(1, usableW / imgW);
+    // Single-page exact overview: fit both width and height proportionally on one A4 landscape page.
+    const scale = Math.min(usableW / imgW, usableH / imgH);
     const renderW = imgW * scale;
     const renderH = imgH * scale;
     const x = margin + (usableW - renderW) / 2;
-
-    // Multi-page vertical rendering: keep full width, paginate down the height.
-    const pageRenderH = usableH;
-    let renderedY = 0;
-    let pageIndex = 0;
-    while (renderedY < renderH - 0.1) {
-      const y = margin - renderedY;
-      if (pageIndex > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', x, y, renderW, renderH);
-      renderedY += pageRenderH;
-      pageIndex += 1;
-    }
+    const y = margin + (usableH - renderH) / 2;
+    pdf.addImage(imgData, 'PNG', x, y, renderW, renderH);
 
     pdf.save('Montatsplaner.pdf');
   } finally {

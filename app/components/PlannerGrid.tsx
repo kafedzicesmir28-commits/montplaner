@@ -193,10 +193,7 @@ export default function PlannerGrid({
     () => new Set(unavailableDayKeys ?? []),
     [unavailableDayKeys]
   );
-  const visibleEmployees = useMemo(() => {
-    if (!forceStoreId) return employees;
-    return employees.filter((employee) => employee.store_id === forceStoreId);
-  }, [employees, forceStoreId]);
+  const visibleEmployees = useMemo(() => employees, [employees]);
   const orderedEmployees = useMemo(() => {
     // Worker visual order is controlled ONLY by position index.
     // UI order must never depend on array index or drag state.

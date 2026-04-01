@@ -270,6 +270,14 @@ export default function PlannerPage() {
     fetchAllData();
   }, [fetchAllData]);
 
+  useEffect(() => {
+    const onStoresUpdated = () => {
+      void fetchAllData({ preserveView: true });
+    };
+    window.addEventListener('stores:colors-updated', onStoresUpdated as EventListener);
+    return () => window.removeEventListener('stores:colors-updated', onStoresUpdated as EventListener);
+  }, [fetchAllData]);
+
   const changeMonth = (delta: number) => {
     setCurrentDate(new Date(year, month + delta, 1));
   };
