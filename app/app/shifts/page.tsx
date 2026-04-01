@@ -7,6 +7,7 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import { Shift, Store } from '@/types/database';
 import { t } from '@/lib/translations';
+import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type ShiftRow = Shift & { store?: Store | null };
 type ShiftTemplate = {
@@ -34,6 +35,15 @@ function normalizeTime24(value: string): string | null {
   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) return `rgba(245,245,245,${alpha})`;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export default function ShiftsPage() {
@@ -189,7 +199,7 @@ export default function ShiftsPage() {
   }
 
   const grouped = shifts.reduce<Record<string, ShiftRow[]>>((acc, s) => {
-    const key = s.is_global ? 'GLOBAL' : (s.store?.name || 'Unknown Store');
+    const key = s.is_global ? 'GLOBAL' : (s.store_id || 'UNKNOWN');
     if (!acc[key]) acc[key] = [];
     acc[key]!.push(s);
     return acc;
@@ -237,17 +247,40 @@ export default function ShiftsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {Object.entries(grouped).flatMap(([groupName, rows], groupIdx) => {
+                {Object.entries(grouped).flatMap(([groupKey, rows], groupIdx) => {
+                  const first = rows[0];
+                  const groupName = first?.is_global
+                    ? 'GLOBAL'
+                    : (first?.store?.name || stores.find((s) => s.id === groupKey)?.name || 'Unknown Store');
+                  const groupColor = first?.is_global
+                    ? '#64748b'
+                    : resolveStoreColor(first?.store?.color || stores.find((s) => s.id === groupKey)?.color || '#f5f5f5');
+                  const groupTintEven = hexToRgba(groupColor, 0.10);
+                  const groupTintOdd = hexToRgba(groupColor, 0.06);
                   const out = [
-                    <tr key={`group-${groupName}`} className="bg-gray-100">
+                    <tr
+                      key={`group-${groupKey}`}
+                      style={{ borderTop: `2px solid ${groupColor}` }}
+                    >
                       <td colSpan={7} className="px-6 py-2 text-xs font-bold uppercase tracking-wide text-gray-700">
-                        {groupName}
+                        <span
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold"
+                          style={{
+                            backgroundColor: groupColor,
+                            color: storeTextColor(groupColor),
+                          }}
+                        >
+                          {groupName}
+                        </span>
                       </td>
                     </tr>,
                   ];
                   rows.forEach((shift, index) => {
                     out.push(
-                      <tr key={shift.id} className={(groupIdx + index) % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <tr
+                        key={shift.id}
+                        style={{ backgroundColor: index % 2 === 0 ? groupTintEven : groupTintOdd }}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {shift.name}
                         </td>
@@ -255,7 +288,21 @@ export default function ShiftsPage() {
                           {shift.code || '—'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {shift.is_global ? 'GLOBAL' : (shift.store?.name || '—')}
+                          {shift.is_global ? (
+                            <span className="inline-flex items-center rounded-md bg-slate-600 px-2 py-0.5 text-xs font-semibold text-white">
+                              GLOBAL
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold"
+                              style={{
+                                backgroundColor: resolveStoreColor(shift.store?.color || '#f5f5f5'),
+                                color: storeTextColor(resolveStoreColor(shift.store?.color || '#f5f5f5')),
+                              }}
+                            >
+                              {shift.store?.name || '—'}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {normalizeTime24(shift.start_time) || shift.start_time}

@@ -37,6 +37,12 @@ function resolveStoreBackgroundColor(store: StoreForPlanner | undefined): string
   return resolveStoreColor(store?.color);
 }
 
+function withAlpha(hex: string, alpha: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(245,245,245,${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const h = hex.replace(/^#/, '');
   if (h.length === 3) {
@@ -255,6 +261,8 @@ export default function PlannerCell({
   }, [forceStoreId]);
 
   const selectedStoreId = forceStoreId ?? storeId ?? pendingStoreId ?? assignment?.store_id ?? '';
+  const selectedStore = stores.find((s) => s.id === selectedStoreId);
+  const selectedStoreColor = resolveStoreBackgroundColor(selectedStore);
   const availableShifts = (selectedStoreId
     ? shifts.filter((s) => shiftAllowedForStore(s, selectedStoreId))
     : []
@@ -699,7 +707,7 @@ export default function PlannerCell({
             </div>
           ) : null}
           {simplifiedShiftOnlyMode ? (
-            <div className="mb-0.5 space-y-0.5">
+            <div className="mb-0.5 flex flex-col gap-2 p-2">
               {availableShifts.length === 0 ? (
                 <div className="rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-[10px] text-blue-800">
                   No shifts available for this store.
@@ -710,17 +718,39 @@ export default function PlannerCell({
                     key={s.id}
                     type="button"
                     onClick={() => {
-                      void applyShiftQuick(s.id);
+                      setShiftId(s.id);
                     }}
                     disabled={saving}
                     autoFocus={idx === 0}
-                    className="w-full rounded border border-blue-200 bg-white px-1.5 py-1 text-left text-[10px] font-medium text-gray-900 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full rounded-md px-2.5 py-2 text-left text-[10px] font-medium transition-all hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      backgroundColor:
+                        shiftId === s.id ? selectedStoreColor : withAlpha(selectedStoreColor, 0.2),
+                      border: `1px solid ${selectedStoreColor}`,
+                      color: shiftId === s.id ? contrastingForeground(selectedStoreColor) : '#1f2937',
+                      transform: shiftId === s.id ? 'scale(1.02)' : undefined,
+                    }}
                   >
-                    <div className="truncate">{s.name}</div>
-                    <div className="text-[9px] text-gray-600">{formatClock(s.start_time)} - {formatClock(s.end_time)}</div>
+                    <div className="truncate text-[11px] font-semibold">{s.name}</div>
+                    <div className="text-[10px]">{formatClock(s.start_time)} - {formatClock(s.end_time)}</div>
+                    <div className="text-[10px]">Break: {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}m</div>
                   </button>
                 ))
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!shiftId && availableShifts.length > 0) {
+                    setShiftId(availableShifts[0]!.id);
+                  }
+                  void persist(true);
+                }}
+                disabled={saving || availableShifts.length === 0}
+                className="mt-1 h-10 rounded-md px-4 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ backgroundColor: selectedStoreColor }}
+              >
+                Save
+              </button>
             </div>
           ) : (
             <select

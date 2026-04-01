@@ -32,8 +32,6 @@ export type PlannerGridProps = {
   onStoreDrop?: (employeeId: string, dateStr: string, storeId: string | null) => void;
   onStatusDrop?: (employeeId: string, dateStr: string, statusType: 'FREI' | 'KRANK' | 'FERIEN') => void;
   storesLoaded?: boolean;
-  showPositionControls?: boolean;
-  onMoveEmployeeToPosition?: (employeeId: string, newPosition: number) => void | Promise<void>;
   onSwapEmployeePosition?: (employeeId: string, newPosition: number) => void | Promise<void>;
   savingEmployeeOrder?: boolean;
 };
@@ -166,8 +164,6 @@ export default function PlannerGrid({
   onStoreDrop,
   onStatusDrop,
   storesLoaded = true,
-  showPositionControls = false,
-  onMoveEmployeeToPosition,
   onSwapEmployeePosition,
   savingEmployeeOrder = false,
 }: PlannerGridProps) {
@@ -442,53 +438,15 @@ export default function PlannerGrid({
                     {employeeProfileBasePath ? (
                       <Link
                         href={`${employeeProfileBasePath}/${employee.id}`}
-                        className="underline decoration-gray-400 underline-offset-2 hover:decoration-gray-700"
+                        className="text-[15px] font-semibold leading-[1.3] tracking-[0.2px] underline decoration-gray-400 underline-offset-2 hover:decoration-gray-700"
                       >
                         {employee.name}
                       </Link>
                     ) : (
-                      employee.name
+                      <span className="text-[15px] font-semibold leading-[1.3] tracking-[0.2px]">
+                        {employee.name}
+                      </span>
                     )}
-                    {showPositionControls && !readOnly ? (
-                      <div className="mt-1 flex items-center gap-1 print:hidden">
-                        <button
-                          type="button"
-                          disabled={savingEmployeeOrder || rowIndex === 0}
-                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, 0)}
-                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
-                          title="Move to first position"
-                        >
-                          Top
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingEmployeeOrder || rowIndex === 0}
-                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, rowIndex - 1)}
-                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
-                          title="Move up"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingEmployeeOrder || rowIndex === orderedEmployees.length - 1}
-                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, rowIndex + 1)}
-                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
-                          title="Move down"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingEmployeeOrder || rowIndex === orderedEmployees.length - 1}
-                          onClick={() => void onMoveEmployeeToPosition?.(employee.id, orderedEmployees.length - 1)}
-                          className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] text-gray-700 disabled:opacity-40"
-                          title="Move to last position"
-                        >
-                          Bottom
-                        </button>
-                      </div>
-                    ) : null}
                   </th>
                   {(() => {
                     const employeeMonthTotal = weekSegments.reduce(

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
@@ -20,9 +20,6 @@ export default function EmployeesPage() {
   const [isActive, setIsActive] = useState(true);
   const [hourlyRate, setHourlyRate] = useState('');
   const [storeId, setStoreId] = useState('');
-  const [savingOrder, setSavingOrder] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -34,7 +31,6 @@ export default function EmployeesPage() {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -101,45 +97,6 @@ export default function EmployeesPage() {
     hourly_rate: parseHourlyRate(),
     ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
   });
-
-  const persistEmployeeOrder = async (reordered: Employee[]) => {
-    setEmployees(reordered);
-    setSavingOrder(true);
-    try {
-      const updates = reordered.map((employee, index) =>
-        supabase.from('employees').update({ sort_order: index + 1 }).eq('id', employee.id)
-      );
-      const results = await Promise.all(updates);
-      const failedUpdate = results.find((result) => result.error);
-      if (failedUpdate?.error) throw failedUpdate.error;
-    } catch (error: any) {
-      alert('Error: ' + error.message);
-      fetchEmployees();
-    } finally {
-      setSavingOrder(false);
-    }
-  };
-
-  const swapEmployeeOrder = async (currentIndex: number, targetIndex: number) => {
-    if (targetIndex < 0 || targetIndex >= employees.length || savingOrder) return;
-    const reordered = [...employees];
-    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
-    await persistEmployeeOrder(reordered);
-  };
-
-  const handleDropReorder = async (toIndex: number) => {
-    if (draggedIndex == null || draggedIndex === toIndex || savingOrder) {
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-    const reordered = [...employees];
-    const [moved] = reordered.splice(draggedIndex, 1);
-    reordered.splice(toIndex, 0, moved);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-    await persistEmployeeOrder(reordered);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,9 +212,6 @@ export default function EmployeesPage() {
             <table className="min-w-full table-fixed divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-blue-50 via-indigo-50 to-cyan-50">
                 <tr>
-                  <th className="w-[90px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    {t.reorder}
-                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     {t.employeeName}
                   </th>
@@ -288,56 +242,12 @@ export default function EmployeesPage() {
                   {employees.map((employee, index) => (
                   <tr
                     key={employee.id}
-                    draggable={!savingOrder}
-                    onDragStart={() => setDraggedIndex(index)}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      if (dragOverIndex !== index) setDragOverIndex(index);
-                    }}
-                    onDrop={() => { void handleDropReorder(index); }}
-                    onDragEnd={() => {
-                      setDraggedIndex(null);
-                      setDragOverIndex(null);
-                    }}
                     className={`transition-colors ${
-                      draggedIndex === index
-                        ? 'bg-blue-50/70'
-                        : dragOverIndex === index
-                          ? 'bg-indigo-50'
-                          : index % 2 === 0
-                            ? 'bg-white'
-                            : 'bg-slate-50'
+                      index % 2 === 0
+                        ? 'bg-white'
+                        : 'bg-slate-50'
                     }`}
                   >
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      <div className="flex items-center gap-1">
-                        <span
-                          className="inline-flex h-8 w-6 items-center justify-center rounded border border-blue-200 bg-blue-50 text-[10px] font-bold text-blue-700"
-                          title="Drag to reorder"
-                          aria-label="Drag to reorder"
-                        >
-                          ⋮⋮
-                        </span>
-                        <button
-                          onClick={() => swapEmployeeOrder(index, index - 1)}
-                          disabled={index === 0 || savingOrder}
-                          title={t.moveUp}
-                          aria-label={t.moveUp}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <ArrowUp size={15} />
-                        </button>
-                        <button
-                          onClick={() => swapEmployeeOrder(index, index + 1)}
-                          disabled={index === employees.length - 1 || savingOrder}
-                          title={t.moveDown}
-                          aria-label={t.moveDown}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <ArrowDown size={15} />
-                        </button>
-                      </div>
-                    </td>
                     <td className="truncate px-4 py-3 text-sm font-medium text-gray-900">
                       {employee.name}
                     </td>

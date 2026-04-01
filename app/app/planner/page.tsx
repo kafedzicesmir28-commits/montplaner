@@ -320,42 +320,6 @@ export default function PlannerPage() {
     }
   }, [fetchAllData]);
 
-  const moveEmployeeToPosition = useCallback(async (employeeId: string, newPosition: number) => {
-    if (savingEmployeeOrder) return;
-    const sorted = [...employees].sort((a, b) => {
-      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
-      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
-      if (ao !== bo) return ao - bo;
-      return a.name.localeCompare(b.name);
-    });
-    const movingWorker = sorted.find((w) => w.id === employeeId);
-    if (!movingWorker) return;
-    const filtered = sorted.filter((w) => w.id !== employeeId);
-    const boundedPosition = Math.max(0, Math.min(newPosition, filtered.length));
-    filtered.splice(boundedPosition, 0, movingWorker);
-    const reordered = filtered.map((worker, index) => ({
-      ...worker,
-      sort_order: index + 1,
-    }));
-
-    setEmployees(reordered);
-    setSavingEmployeeOrder(true);
-    try {
-      const updates = reordered.map((worker) =>
-        supabase.from('employees').update({ sort_order: worker.sort_order ?? null }).eq('id', worker.id)
-      );
-      const results = await Promise.all(updates);
-      const failed = results.find((r) => r.error);
-      if (failed?.error) throw failed.error;
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Failed to save employee order';
-      alert(message);
-      await fetchAllData({ preserveView: true });
-    } finally {
-      setSavingEmployeeOrder(false);
-    }
-  }, [employees, fetchAllData, savingEmployeeOrder]);
-
   const swapEmployeePosition = useCallback(async (employeeId: string, newPosition: number) => {
     if (savingEmployeeOrder) return;
     const sorted = [...employees].sort((a, b) => {
@@ -537,9 +501,7 @@ export default function PlannerPage() {
             onStoreDrop={handleStoreDrop}
             onStatusDrop={handleStatusDrop}
             storesLoaded={storesLoaded}
-            showPositionControls
             savingEmployeeOrder={savingEmployeeOrder}
-            onMoveEmployeeToPosition={moveEmployeeToPosition}
             onSwapEmployeePosition={swapEmployeePosition}
           />
         </div>
