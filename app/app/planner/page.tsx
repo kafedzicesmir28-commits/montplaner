@@ -65,6 +65,29 @@ function getISOWeeksInYear(year: number): number {
   return getISOWeek(dec28);
 }
 
+/** Advance ISO week by `delta` (may cross ISO week-year boundaries). */
+function addISOWeek(weekYear: number, weekNumber: number, delta: number): { weekYear: number; weekNumber: number } {
+  let y = weekYear;
+  let w = weekNumber + delta;
+  while (w < 1) {
+    y -= 1;
+    w += getISOWeeksInYear(y);
+  }
+  for (;;) {
+    const max = getISOWeeksInYear(y);
+    if (w <= max) break;
+    w -= max;
+    y += 1;
+  }
+  return { weekYear: y, weekNumber: w };
+}
+
+function formatWeekId(weekYear: number, weekNumber: number): string {
+  return `${weekYear}-W${String(weekNumber).padStart(2, '0')}`;
+}
+
+type PlannerPrintWeekCount = 1 | 2 | 3;
+
 export default function PlannerPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -75,13 +98,18 @@ export default function PlannerPage() {
   const [storesLoaded, setStoresLoaded] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [selectedWeekA, setSelectedWeekA] = useState<string>('');
-  const [selectedWeekB, setSelectedWeekB] = useState<string>('');
-  const [printSelection, setPrintSelection] = useState<{ weekA: string; weekB: string } | null>(null);
+  const [selectedStartWeek, setSelectedStartWeek] = useState<string>('');
+  const [selectedPrintWeekCount, setSelectedPrintWeekCount] = useState<PlannerPrintWeekCount>(1);
+  const [printSelection, setPrintSelection] = useState<{
+    startWeek: string;
+    weekCount: PlannerPrintWeekCount;
+  } | null>(null);
   const [printScale, setPrintScale] = useState(1);
   const [pendingStoreByKey, setPendingStoreByKey] = useState<Record<string, string>>({});
   const [savingEmployeeOrder, setSavingEmployeeOrder] = useState(false);
+  /** Unscaled content (title + grid); used to compute fit-to-page scale. */
   const printRootRef = useRef<HTMLDivElement>(null);
+  const printScaleWrapperRef = useRef<HTMLDivElement>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -108,63 +136,84 @@ export default function PlannerPage() {
     });
   }, [activeWeekMeta.weekYear]);
 
-  const defaultWeekSelection = useMemo(() => {
-    const totalWeeks = getISOWeeksInYear(activeWeekMeta.weekYear);
-    const first = activeWeekMeta.week;
-    const second = first < totalWeeks ? first + 1 : Math.max(1, first - 1);
-    return {
-      weekA: `${activeWeekMeta.weekYear}-W${String(first).padStart(2, '0')}`,
-      weekB: `${activeWeekMeta.weekYear}-W${String(second).padStart(2, '0')}`,
-    };
-  }, [activeWeekMeta.week, activeWeekMeta.weekYear]);
+  const defaultStartWeekId = useMemo(
+    () => formatWeekId(activeWeekMeta.weekYear, activeWeekMeta.week),
+    [activeWeekMeta.week, activeWeekMeta.weekYear]
+  );
 
   const printDays = useMemo(() => {
     if (!printSelection) return [];
-    const toWeekStart = (weekId: string) => {
-      const [weekYearPart, weekPart] = weekId.split('-W');
-      const weekYear = Number(weekYearPart);
-      const weekNumber = Number(weekPart);
-      if (!Number.isFinite(weekYear) || !Number.isFinite(weekNumber)) return null;
-      return startOfISOWeekFromYearWeek(weekYear, weekNumber);
-    };
-    const firstStart = toWeekStart(printSelection.weekA);
-    const secondStart = toWeekStart(printSelection.weekB);
-    if (!firstStart || !secondStart) return [];
-    const firstWeekDays = Array.from({ length: 7 }, (_, idx) => addDays(firstStart, idx));
-    const secondWeekDays = Array.from({ length: 7 }, (_, idx) => addDays(secondStart, idx));
-    return [...firstWeekDays, ...secondWeekDays];
+    const [weekYearPart, weekPart] = printSelection.startWeek.split('-W');
+    const weekYear = Number(weekYearPart);
+    const weekNumber = Number(weekPart);
+    if (!Number.isFinite(weekYear) || !Number.isFinite(weekNumber)) return [];
+    const days: Date[] = [];
+    for (let w = 0; w < printSelection.weekCount; w++) {
+      const { weekYear: wy, weekNumber: wn } = addISOWeek(weekYear, weekNumber, w);
+      const weekStart = startOfISOWeekFromYearWeek(wy, wn);
+      for (let d = 0; d < 7; d++) {
+        days.push(addDays(weekStart, d));
+      }
+    }
+    return days;
   }, [printSelection]);
 
-  const selectedWeeksAreValid =
-    selectedWeekA !== '' &&
-    selectedWeekB !== '' &&
-    selectedWeekA !== selectedWeekB &&
-    printWeekOptions.some((opt) => opt.id === selectedWeekA) &&
-    printWeekOptions.some((opt) => opt.id === selectedWeekB);
+  const selectedPrintIsValid =
+    selectedStartWeek !== '' && printWeekOptions.some((opt) => opt.id === selectedStartWeek);
 
   useEffect(() => {
     if (!printSelection || printDays.length === 0) return;
-    const id = window.setTimeout(() => {
+    let cancelled = false;
+    let printTimer: number | undefined;
+
+    const runPrint = () => {
+      if (cancelled) return;
       const mmToPx = (mm: number) => (mm / 25.4) * 96;
-      const pageWidthPx = mmToPx(297); // A4 landscape width
-      const pageHeightPx = mmToPx(210); // A4 landscape height
-      const marginPx = mmToPx(16); // 8mm each side => 16mm total
-      const availableWidth = pageWidthPx - marginPx;
-      const availableHeight = pageHeightPx - marginPx;
+      const marginMm = 8;
+      const pageWidthPx = mmToPx(297);
+      const pageHeightPx = mmToPx(210);
+      const marginPx = mmToPx(marginMm);
+      const availableWidth = pageWidthPx - 2 * marginPx;
+      const availableHeight = pageHeightPx - 2 * marginPx;
       const content = printRootRef.current;
-      if (content) {
+      const wrapper = printScaleWrapperRef.current;
+      const safety = 0.985;
+      let fit = 0.85;
+      if (content && wrapper) {
         const contentWidth = Math.max(content.scrollWidth, content.offsetWidth, 1);
         const contentHeight = Math.max(content.scrollHeight, content.offsetHeight, 1);
-        const fitScale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
-        setPrintScale(Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 0.85);
+        const fitScale = Math.min(
+          1,
+          (availableWidth * safety) / contentWidth,
+          (availableHeight * safety) / contentHeight
+        );
+        fit = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 0.85;
+        wrapper.style.transform = `scale(${fit})`;
+        wrapper.style.transformOrigin = 'top left';
+        wrapper.style.width = `${100 / Math.max(fit, 0.01)}%`;
+        setPrintScale(fit);
       } else {
-        setPrintScale(0.85);
+        setPrintScale(fit);
       }
       window.scrollTo(0, 0);
       document.body.style.height = 'auto';
-      window.setTimeout(() => window.print(), 120);
-    }, 120);
-    return () => window.clearTimeout(id);
+      document.documentElement.style.height = 'auto';
+      printTimer = window.setTimeout(() => {
+        if (!cancelled) window.print();
+      }, 50);
+    };
+
+    let rafNested = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      rafNested = window.requestAnimationFrame(runPrint);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(rafNested);
+      if (printTimer !== undefined) window.clearTimeout(printTimer);
+    };
   }, [printSelection, printDays.length]);
 
   useEffect(() => {
@@ -172,6 +221,13 @@ export default function PlannerPage() {
       setPrintSelection(null);
       setPrintScale(1);
       document.body.style.height = '';
+      document.documentElement.style.height = '';
+      const wrapper = printScaleWrapperRef.current;
+      if (wrapper) {
+        wrapper.style.transform = '';
+        wrapper.style.transformOrigin = '';
+        wrapper.style.width = '';
+      }
     };
     window.addEventListener('afterprint', onAfterPrint);
     return () => window.removeEventListener('afterprint', onAfterPrint);
@@ -207,6 +263,18 @@ export default function PlannerPage() {
       setStoresLoaded(false);
     }
     try {
+      const anchorDate =
+        new Date().getFullYear() === year && new Date().getMonth() === month
+          ? new Date()
+          : new Date(year, month, 1);
+      const planWeekYear = getISOWeekYear(anchorDate);
+      const plannerRangeStart = startOfISOWeekFromYearWeek(planWeekYear, 1);
+      const plannerLastWeekStart = startOfISOWeekFromYearWeek(planWeekYear, getISOWeeksInYear(planWeekYear));
+      // Buffer after ISO year end so multi-week prints near year boundary still load shifts.
+      const plannerRangeEnd = addDays(plannerLastWeekStart, 6 + 21);
+      const rangeStartStr = formatDate(plannerRangeStart);
+      const rangeEndStr = formatDate(plannerRangeEnd);
+
       const [employeesRes, storesRes, shiftsRes, assignmentsRes, vacationsRes] = await Promise.all([
         supabase
           .from('employees')
@@ -225,13 +293,13 @@ export default function PlannerPage() {
               color
             )
           `)
-          .gte('date', formatDate(startOfISOWeek(new Date(year, month, 1))))
-          .lte('date', formatDate(endOfISOWeek(new Date(year, month + 1, 0)))),
+          .gte('date', rangeStartStr)
+          .lte('date', rangeEndStr),
         supabase
           .from('vacations')
           .select('*')
-          .lte('start_date', formatDate(endOfISOWeek(new Date(year, month + 1, 0))))
-          .gte('end_date', formatDate(startOfISOWeek(new Date(year, month, 1)))),
+          .lte('start_date', rangeEndStr)
+          .gte('end_date', rangeStartStr),
       ]);
 
       if (employeesRes.error) throw employeesRes.error;
@@ -378,21 +446,37 @@ export default function PlannerPage() {
   }, [employees, fetchAllData, savingEmployeeOrder]);
 
   const openPrintModal = useCallback(() => {
-    const base = printSelection ?? defaultWeekSelection;
-    setSelectedWeekA(base.weekA);
-    setSelectedWeekB(base.weekB);
+    if (printSelection) {
+      setSelectedStartWeek(printSelection.startWeek);
+      setSelectedPrintWeekCount(printSelection.weekCount);
+    } else {
+      setSelectedStartWeek(defaultStartWeekId);
+      setSelectedPrintWeekCount(1);
+    }
     setIsPrintModalOpen(true);
-  }, [defaultWeekSelection, printSelection]);
+  }, [defaultStartWeekId, printSelection]);
 
   const closePrintModal = useCallback(() => {
     setIsPrintModalOpen(false);
   }, []);
 
   const confirmPrintSelection = useCallback(() => {
-    if (!selectedWeeksAreValid) return;
-    setPrintSelection({ weekA: selectedWeekA, weekB: selectedWeekB });
+    if (!selectedPrintIsValid) return;
+    setPrintSelection({ startWeek: selectedStartWeek, weekCount: selectedPrintWeekCount });
     setIsPrintModalOpen(false);
-  }, [selectedWeekA, selectedWeekB, selectedWeeksAreValid]);
+  }, [selectedPrintIsValid, selectedPrintWeekCount, selectedStartWeek]);
+
+  const printTitleWeekLabels = useMemo(() => {
+    if (!printSelection) return [];
+    const [weekYearPart, weekPart] = printSelection.startWeek.split('-W');
+    const weekYear = Number(weekYearPart);
+    const weekNumber = Number(weekPart);
+    if (!Number.isFinite(weekYear) || !Number.isFinite(weekNumber)) return [];
+    return Array.from({ length: printSelection.weekCount }, (_, i) => {
+      const { weekYear: wy, weekNumber: wn } = addISOWeek(weekYear, weekNumber, i);
+      return `KW${wn} ${wy}`;
+    });
+  }, [printSelection]);
 
   if (loading || !storesLoaded) {
     return (
@@ -430,7 +514,7 @@ export default function PlannerPage() {
               onClick={openPrintModal}
               className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
             >
-              Print 2 Weeks
+              Print weeks
             </button>
           </>
         }
@@ -517,39 +601,42 @@ export default function PlannerPage() {
         {isPrintModalOpen ? (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 print:hidden">
             <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl">
-              <h3 className="text-base font-semibold text-gray-900">Select weeks to print</h3>
+              <h3 className="text-base font-semibold text-gray-900">Print planner</h3>
+              <p className="mt-1 text-xs text-gray-600">
+                Choose how many consecutive weeks to include and the first calendar week (ISO). Default is one week.
+              </p>
               <div className="mt-3 space-y-3">
+                <fieldset>
+                  <legend className="text-sm font-medium text-gray-700">Number of weeks</legend>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {([1, 2, 3] as const).map((n) => (
+                      <label key={n} className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+                        <input
+                          type="radio"
+                          name="print-week-count"
+                          checked={selectedPrintWeekCount === n}
+                          onChange={() => setSelectedPrintWeekCount(n)}
+                          className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>{n === 1 ? '1 week' : `${n} weeks`}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 <label className="block text-sm font-medium text-gray-700">
-                  First week
+                  First week (start)
                   <select
-                    value={selectedWeekA}
-                    onChange={(e) => setSelectedWeekA(e.target.value)}
+                    value={selectedStartWeek}
+                    onChange={(e) => setSelectedStartWeek(e.target.value)}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
                   >
                     {printWeekOptions.map((opt) => (
-                      <option key={`a-${opt.id}`} value={opt.id}>
-                        {opt.label}
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label} ({opt.id.replace('-', ' ')})
                       </option>
                     ))}
                   </select>
                 </label>
-                <label className="block text-sm font-medium text-gray-700">
-                  Second week
-                  <select
-                    value={selectedWeekB}
-                    onChange={(e) => setSelectedWeekB(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
-                  >
-                    {printWeekOptions.map((opt) => (
-                      <option key={`b-${opt.id}`} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {selectedWeekA === selectedWeekB ? (
-                  <p className="text-xs font-medium text-red-600">Please select two different weeks.</p>
-                ) : null}
               </div>
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button
@@ -562,7 +649,7 @@ export default function PlannerPage() {
                 <button
                   type="button"
                   onClick={confirmPrintSelection}
-                  disabled={!selectedWeeksAreValid}
+                  disabled={!selectedPrintIsValid}
                   className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Print
@@ -574,34 +661,39 @@ export default function PlannerPage() {
 
         {printSelection && printDays.length > 0 ? (
           <div
-            id="print-scale-wrapper"
-            className="hidden print:block"
-            style={{
-              transform: `scale(${printScale})`,
-              transformOrigin: 'top left',
-              width: `${100 / Math.max(printScale, 0.01)}%`,
-            }}
+            id="planner-print-area"
+            className="planner-print-area invisible pointer-events-none fixed top-0 left-[-9999px] z-[-1] w-max max-w-none overflow-visible print:visible print:pointer-events-auto print:static print:left-auto print:z-auto print:w-auto print:max-w-none"
           >
-            <div id="planner-print-root" ref={printRootRef} className="space-y-3">
-              <div className="text-center">
-                <h1 className="text-lg font-bold text-gray-900">
-                  {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                  {' '}
-                  ({printSelection.weekA.replace('-', ' ')} + {printSelection.weekB.replace('-', ' ')})
-                </h1>
+            <div
+              id="print-scale-wrapper"
+              ref={printScaleWrapperRef}
+              style={{
+                transform: `scale(${printScale})`,
+                transformOrigin: 'top left',
+                width: `${100 / Math.max(printScale, 0.01)}%`,
+              }}
+            >
+              <div ref={printRootRef} className="space-y-2">
+                <div className="text-center print:px-0">
+                  <h1 className="planner-print-title text-lg font-bold leading-tight text-gray-900">
+                    {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    {' — '}
+                    {printTitleWeekLabels.join(', ')}
+                  </h1>
+                </div>
+                <PlannerGrid
+                  employees={employees}
+                  days={printDays}
+                  assignments={assignments}
+                  vacations={vacations}
+                  stores={stores}
+                  shifts={shifts}
+                  onAssignmentsUpdated={() => fetchAllData({ preserveView: true })}
+                  printWeeklyTotals
+                  readOnly
+                  storesLoaded={storesLoaded}
+                />
               </div>
-              <PlannerGrid
-                employees={employees}
-                days={printDays}
-                assignments={assignments}
-                vacations={vacations}
-                stores={stores}
-                shifts={shifts}
-                onAssignmentsUpdated={() => fetchAllData({ preserveView: true })}
-                printWeeklyTotals
-                readOnly
-                storesLoaded={storesLoaded}
-              />
             </div>
           </div>
         ) : null}
@@ -612,45 +704,91 @@ export default function PlannerPage() {
               print-color-adjust: exact !important;
             }
 
+            html {
+              width: 100%;
+              height: auto !important;
+              min-height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+
             body * {
               visibility: hidden !important;
             }
 
-            #planner-print-root,
-            #planner-print-root * {
+            #planner-print-area,
+            #planner-print-area * {
               visibility: visible !important;
             }
 
-            #planner-print-root {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              page-break-before: avoid;
-              page-break-after: avoid;
-              page-break-inside: avoid;
-              break-inside: avoid;
+            body > div.min-h-screen {
+              min-height: 0 !important;
+              background: #fff !important;
             }
 
-            #planner-print-root .overflow-x-auto {
+            body > div.min-h-screen > main {
+              margin: 0 !important;
+              padding: 0 !important;
+              max-width: none !important;
+            }
+
+            #planner-print-area {
+              margin: 0 !important;
+              padding: 0 !important;
+              position: relative !important;
+              left: auto !important;
+              top: auto !important;
+              width: 100% !important;
+              max-width: none !important;
+              page-break-before: avoid !important;
+              page-break-after: avoid !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            #print-scale-wrapper {
+              margin: 0 !important;
+              padding: 0 !important;
+              page-break-before: avoid !important;
+              page-break-after: avoid !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              transform-origin: top left !important;
+            }
+
+            #planner-print-area .overflow-x-auto {
               overflow: visible !important;
             }
 
-            #planner-print-root table {
+            #planner-print-area table {
               width: 100% !important;
+              font-size: clamp(8px, 1.75mm, 11px) !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            #planner-print-area thead,
+            #planner-print-area tbody,
+            #planner-print-area tr {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            .planner-print-title {
+              font-size: clamp(10px, 2.2mm, 14px) !important;
+              margin: 0 0 6px !important;
+            }
+
+            #planner-print-area table th,
+            #planner-print-area table td {
+              padding: 0.12rem 0.28rem !important;
             }
 
             html,
             body {
               height: auto !important;
-              overflow: hidden !important;
-            }
-
-            #print-scale-wrapper {
-              position: absolute;
-              top: 0;
-              left: 0;
-              transform-origin: top left !important;
+              min-height: 0 !important;
+              overflow: visible !important;
             }
 
             @page {

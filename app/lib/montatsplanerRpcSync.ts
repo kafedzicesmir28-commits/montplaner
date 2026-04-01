@@ -5,6 +5,29 @@ import { formatErrorMessage } from '@/lib/utils';
 import { getEmployeeMonthlyHourTotals, type PlannerShiftAssignmentRow } from '@/lib/hoursCalculator';
 import type { Vacation } from '@/types/database';
 
+/** Embedded shift fields only — matches `hoursCalculator` needs; lighter than `shifts(*)`. */
+const SHIFT_EMBED =
+  'id,name,start_time,end_time,break_minutes';
+
+const RPC_SYNC_MAX_ATTEMPTS = 3;
+const FETCH_RETRY_MS = [400, 1200, 2500];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Browser / edge failures before a normal PostgREST JSON body (offline, DNS, CORS, blocked tab). */
+function isTransientFetchFailure(err: unknown): boolean {
+  const msg = formatErrorMessage(err).toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('load failed') ||
+    msg.includes('fetch failed')
+  );
+}
+
 /** Month totals aligned with planner shift_assignments + vacations (same as Buchhaltung). */
 export type RpcHoursRow = {
   normal_hours: number;
@@ -76,31 +99,56 @@ export async function fetchRpcHoursForYear(
   year: number,
   employeeIds: string[]
 ): Promise<Record<MonthKey, Record<string, RpcHoursRow | null>>> {
+  if (employeeIds.length === 0) {
+    const empty = {} as Record<MonthKey, Record<string, RpcHoursRow | null>>;
+    for (const mk of MONTH_KEYS) empty[mk] = {};
+    return empty;
+  }
+
   const start = `${year}-01-01`;
   const end = `${year}-12-31`;
 
-  const [assignRes, vacRes] = await Promise.all([
-    supabase
+  let assignments: PlannerShiftAssignmentRow[] = [];
+  let vacations: Vacation[] = [];
+  for (let attempt = 0; attempt < RPC_SYNC_MAX_ATTEMPTS; attempt++) {
+    const assignQ = supabase
       .from('shift_assignments')
-      .select('employee_id, date, assignment_type, custom_start_time, custom_end_time, custom_break_minutes, shift_id, store_id, shift:shifts(*)')
+      .select(
+        `employee_id, date, assignment_type, custom_start_time, custom_end_time, custom_break_minutes, shift_id, store_id, shift:shifts(${SHIFT_EMBED})`
+      )
       .gte('date', start)
-      .lte('date', end),
-    supabase.from('vacations').select('*').lte('start_date', end).gte('end_date', start),
-  ]);
+      .lte('date', end)
+      .in('employee_id', employeeIds);
 
-  if (assignRes.error) {
-    const msg = formatErrorMessage(assignRes.error);
-    console.error('shift_assignments load for planner sync', msg, assignRes.error);
-    throw assignRes.error;
-  }
-  if (vacRes.error) {
-    const msg = formatErrorMessage(vacRes.error);
-    console.error('vacations load for planner sync', msg, vacRes.error);
-    throw vacRes.error;
-  }
+    const vacQ = supabase
+      .from('vacations')
+      .select('*')
+      .lte('start_date', end)
+      .gte('end_date', start)
+      .in('employee_id', employeeIds);
 
-  const assignments = (assignRes.data || []) as unknown as PlannerShiftAssignmentRow[];
-  const vacations = (vacRes.data || []) as Vacation[];
+    const [assignRes, vacRes] = await Promise.all([assignQ, vacQ]);
+
+    if (!assignRes.error && !vacRes.error) {
+      assignments = (assignRes.data || []) as unknown as PlannerShiftAssignmentRow[];
+      vacations = (vacRes.data || []) as Vacation[];
+      break;
+    }
+
+    const err = assignRes.error ?? vacRes.error;
+    const transient = isTransientFetchFailure(err);
+    if (transient && attempt < RPC_SYNC_MAX_ATTEMPTS - 1) {
+      await sleep(FETCH_RETRY_MS[attempt] ?? 800);
+      continue;
+    }
+
+    const msg = formatErrorMessage(err);
+    const hint = transient
+      ? ' Check network, VPN, and NEXT_PUBLIC_SUPABASE_URL; ad blockers can block Supabase.'
+      : '';
+    console.error('shift_assignments / vacations load for planner sync', msg + hint, err);
+    throw err;
+  }
 
   const out = {} as Record<MonthKey, Record<string, RpcHoursRow | null>>;
 

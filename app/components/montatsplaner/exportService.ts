@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import montatsplanerStyles from './montatsplaner.module.css';
 import type { HeaderEmployee } from './HeaderRow';
 import type { PlannerData } from './plannerTypes';
 import { MONTH_KEYS } from './plannerTypes';
@@ -184,57 +185,78 @@ export async function exportPlannerExcel(params: {
 }
 
 export async function exportPlannerPdf(elementId: string): Promise<void> {
-  const el = document.getElementById(elementId);
+  const el = document.getElementById(elementId) as HTMLElement | null;
   if (!el) return;
 
-  const offscreen = document.createElement('div');
-  offscreen.id = 'export-full-table';
-  offscreen.style.position = 'absolute';
-  offscreen.style.left = '-9999px';
-  offscreen.style.top = '0';
-  offscreen.style.background = '#ffffff';
-  offscreen.style.overflow = 'visible';
-  offscreen.style.maxWidth = 'none';
-  offscreen.style.width = `${el.scrollWidth || el.clientWidth}px`;
-  offscreen.style.padding = '0';
+  const children = Array.from(el.children) as HTMLElement[];
+  const topScroll = children[0] ?? null;
+  const bottomScroll = children[1] ?? null;
 
-  const clone = el.cloneNode(true) as HTMLElement;
-  clone.style.overflow = 'visible';
-  clone.style.maxHeight = 'none';
-  clone.style.maxWidth = 'none';
-  clone.style.width = 'max-content';
-  clone.style.height = 'auto';
+  const snap = {
+    el: {
+      overflow: el.style.overflow,
+      maxHeight: el.style.maxHeight,
+      height: el.style.height,
+    },
+    top: topScroll
+      ? {
+          display: topScroll.style.display,
+        }
+      : null,
+    bottom: bottomScroll
+      ? {
+          overflow: bottomScroll.style.overflow,
+          overflowX: bottomScroll.style.overflowX,
+          overflowY: bottomScroll.style.overflowY,
+          maxHeight: bottomScroll.style.maxHeight,
+          height: bottomScroll.style.height,
+          scrollLeft: bottomScroll.scrollLeft,
+          scrollTop: bottomScroll.scrollTop,
+        }
+      : null,
+  };
 
-  // Ensure export clone renders full table, not viewport-scrolled shell.
-  const topScroll = clone.querySelector(':scope > div:first-child') as HTMLElement | null;
-  if (topScroll) topScroll.style.display = 'none';
-  const bottomScroll = clone.querySelector(':scope > div:nth-child(2)') as HTMLElement | null;
-  if (bottomScroll) {
-    bottomScroll.style.overflow = 'visible';
-    bottomScroll.style.maxHeight = 'none';
-    bottomScroll.style.height = 'auto';
-  }
-  clone.querySelectorAll<HTMLElement>('*').forEach((node) => {
-    const style = node.style;
-    if (style.overflowX === 'auto' || style.overflowY === 'auto' || style.overflow === 'auto') {
-      style.overflow = 'visible';
-    }
-    if (style.maxHeight) style.maxHeight = 'none';
-  });
-
-  offscreen.appendChild(clone);
-  document.body.appendChild(offscreen);
   try {
-    const canvas = await html2canvas(clone, {
-      scale: 1.8,
+    // Capture the live DOM. Clones parked at left:-9999px often produce a blank canvas with html2canvas.
+    el.style.overflow = 'visible';
+    el.style.maxHeight = 'none';
+    el.style.height = 'auto';
+
+    if (topScroll) topScroll.style.display = 'none';
+    if (bottomScroll) {
+      bottomScroll.style.overflow = 'visible';
+      bottomScroll.style.maxHeight = 'none';
+      bottomScroll.style.height = 'auto';
+      bottomScroll.scrollLeft = 0;
+      bottomScroll.scrollTop = 0;
+    }
+
+    el.classList.add(montatsplanerStyles.pdfExportCapture);
+
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const w = Math.max(el.scrollWidth, el.offsetWidth, 1);
+    const h = Math.max(el.scrollHeight, el.offsetHeight, 1);
+
+    // Let html2canvas derive crop from the cloned element; explicit width/height can mismatch bounds and yield a blank image.
+    const canvas = await html2canvas(el, {
+      scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
-      windowWidth: clone.scrollWidth,
-      windowHeight: clone.scrollHeight,
+      windowWidth: w,
+      windowHeight: h,
+      scrollX: 0,
+      scrollY: -window.scrollY,
     });
 
-    const imgData = canvas.toDataURL('image/png');
+    if (canvas.width < 2 || canvas.height < 2) {
+      throw new Error('PDF export: capture produced an empty canvas. Try again or resize the planner.');
+    }
+
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
@@ -243,16 +265,56 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
     const margin = 6;
     const usableW = pageW - margin * 2;
     const usableH = pageH - margin * 2;
-    // Single-page exact overview: fit both width and height proportionally on one A4 landscape page.
-    const scale = Math.min(usableW / imgW, usableH / imgH);
-    const renderW = imgW * scale;
-    const renderH = imgH * scale;
-    const x = margin + (usableW - renderW) / 2;
-    const y = margin + (usableH - renderH) / 2;
-    pdf.addImage(imgData, 'PNG', x, y, renderW, renderH);
+
+    // Fit full table **width** to the page; stack extra height pages. Avoids squashing columns like single-page fit.
+    const mmPerPx = usableW / imgW;
+    let srcY = 0;
+    let pageIdx = 0;
+
+    while (srcY < imgH - 0.01) {
+      if (pageIdx > 0) {
+        pdf.addPage('a4', 'landscape');
+      }
+      const remainingPx = imgH - srcY;
+      const sliceHmm = Math.min(usableH, remainingPx * mmPerPx);
+      const slicePx = Math.min(sliceHmm / mmPerPx, remainingPx);
+
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = imgW;
+      sliceCanvas.height = Math.max(1, Math.ceil(slicePx));
+      const ctx = sliceCanvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('PDF export: could not create canvas context.');
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(canvas, 0, srcY, imgW, slicePx, 0, 0, imgW, slicePx);
+
+      const imgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
+      const drawHmm = slicePx * mmPerPx;
+      pdf.addImage(imgData, 'JPEG', margin, margin, usableW, drawHmm);
+
+      srcY += slicePx;
+      pageIdx++;
+    }
 
     pdf.save('Montatsplaner.pdf');
   } finally {
-    document.body.removeChild(offscreen);
+    el.classList.remove(montatsplanerStyles.pdfExportCapture);
+    el.style.overflow = snap.el.overflow;
+    el.style.maxHeight = snap.el.maxHeight;
+    el.style.height = snap.el.height;
+    if (topScroll && snap.top) {
+      topScroll.style.display = snap.top.display;
+    }
+    if (bottomScroll && snap.bottom) {
+      bottomScroll.style.overflow = snap.bottom.overflow;
+      bottomScroll.style.overflowX = snap.bottom.overflowX;
+      bottomScroll.style.overflowY = snap.bottom.overflowY;
+      bottomScroll.style.maxHeight = snap.bottom.maxHeight;
+      bottomScroll.style.height = snap.bottom.height;
+      bottomScroll.scrollLeft = snap.bottom.scrollLeft;
+      bottomScroll.scrollTop = snap.bottom.scrollTop;
+    }
   }
 }

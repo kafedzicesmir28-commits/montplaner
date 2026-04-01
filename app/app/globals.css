@@ -78,17 +78,30 @@ td {
     print-color-adjust: exact;
   }
 
-  .planner-print-area table {
-    page-break-inside: auto;
-  }
-
-  .planner-print-area tr {
+  .planner-print-area {
     page-break-inside: avoid;
-    page-break-after: auto;
+    break-inside: avoid;
   }
 
   @page {
-    margin: 12mm;
-    size: landscape;
+    size: A4 landscape;
+    margin: 8mm;
   }
+}
+
+/* Monthly planner (/montatsplaner) — full viewport width under nav (Layout sets main; this reinforces). */
+.planner-fullwidth {
+  display: block;
+  width: 100%;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+}
+
+.planner-fullwidth > div.min-h-screen > main {
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }

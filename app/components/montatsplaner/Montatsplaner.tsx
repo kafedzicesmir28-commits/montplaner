@@ -118,23 +118,25 @@ export function Montatsplaner({ year, employees }: Props) {
   }, []);
 
   return (
-    <div id="montatsplaner-export-root" className={styles.root}>
-      <div ref={topScrollRef} className={styles.topScroll}>
-        <div style={{ width: tableWidth, height: 1 }} aria-hidden />
-      </div>
-      <div ref={bottomScrollRef} className={styles.bottomScroll}>
-        <table className={styles.table}>
-          <HeaderRow year={year} employees={employees} />
-          {MONTH_LABELS.map((label, idx) => (
-            <MonthBlock
-              key={MONTH_KEYS[idx]}
-              monthLabel={label}
-              monthKey={MONTH_KEYS[idx]}
-              employees={employees}
-            />
-          ))}
-          <TotalBlock employees={employees} />
-        </table>
+    <div id="monthsplanner-print-area" className={styles.printOuter}>
+      <div id="montatsplaner-export-root" className={styles.root}>
+        <div ref={topScrollRef} className={styles.topScroll}>
+          <div style={{ width: tableWidth, height: 1 }} aria-hidden />
+        </div>
+        <div ref={bottomScrollRef} className={styles.bottomScroll}>
+          <table className={styles.table}>
+            <HeaderRow year={year} employees={employees} />
+            {MONTH_LABELS.map((label, idx) => (
+              <MonthBlock
+                key={MONTH_KEYS[idx]}
+                monthLabel={label}
+                monthKey={MONTH_KEYS[idx]}
+                employees={employees}
+              />
+            ))}
+            <TotalBlock employees={employees} />
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -43,6 +43,8 @@ export default function Layout({
   const isPlannerRoute =
     pathname === '/planner' || (pathname?.startsWith('/planner/') ?? false);
 
+  const isMontatsplanerRoute = pathname === '/montatsplaner';
+
   return (
     <div className="min-h-screen bg-[#f8f9fb] text-gray-900 print:bg-white">
       {isPlannerRoute ? (
@@ -129,10 +131,12 @@ export default function Layout({
       )}
       <main
         className={
-          'mx-auto px-4 py-8 sm:px-6 lg:px-8 print:max-w-none print:px-2 print:py-4 ' +
-          (isPlannerRoute
-            ? 'max-w-none py-2 sm:py-3 lg:px-6 xl:px-8'
-            : 'max-w-7xl')
+          isMontatsplanerRoute
+            ? 'mx-0 w-full max-w-none px-0 py-2 sm:py-2 print:max-w-none print:px-2 print:py-4'
+            : 'mx-auto px-4 py-8 sm:px-6 lg:px-8 print:max-w-none print:px-2 print:py-4 ' +
+              (isPlannerRoute
+                ? 'max-w-none py-2 sm:py-3 lg:px-6 xl:px-8'
+                : 'max-w-7xl')
         }
       >
         {children}

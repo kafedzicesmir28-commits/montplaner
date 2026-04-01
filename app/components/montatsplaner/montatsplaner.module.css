@@ -1,49 +1,67 @@
 /* Montatsplaner — spreadsheet-only styling (light theme, no shadows/cards) */
 
 .root {
-  --year-col-w: 70px;
-  --month-col-w: 90px;
-  --label-col-w: 90px;
+  --year-col-w: 92px;
+  --month-col-w: 100px;
+  --label-col-w: 112px;
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
   background: #ffffff;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
   color: #222;
   overflow: hidden;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 80px);
+  max-height: calc(100dvh - 80px);
   display: flex;
   flex-direction: column;
 }
 
 .topScroll {
+  box-sizing: border-box;
+  width: 100%;
+  flex: none;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid #cfd6de;
   border-bottom: none;
+  border-left: none;
+  border-right: none;
   background: #f8fafc;
   min-height: 12px;
 }
 
 .bottomScroll {
-  overflow: auto;
+  box-sizing: border-box;
+  width: 100%;
   flex: 1;
+  min-width: 0;
   min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
   position: relative;
 }
 
 .table {
+  table-layout: auto;
   width: max-content;
-  min-width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
   border: 1px solid #cfd6de;
+  border-left: none;
+  border-right: none;
 }
 
 .cell {
   border: 1px solid #cfd6de;
-  padding: 4px;
+  padding: 4px 6px;
   box-sizing: border-box;
   vertical-align: middle;
+  overflow: visible;
 }
 
 .headerCell {
@@ -58,7 +76,6 @@
 .headerYear {
   width: var(--year-col-w);
   min-width: var(--year-col-w);
-  max-width: var(--year-col-w);
   height: 40px;
   text-align: center;
   vertical-align: middle;
@@ -69,24 +86,21 @@
 .headerLabelSpacer {
   width: var(--label-col-w);
   min-width: var(--label-col-w);
-  max-width: var(--label-col-w);
-  height: 80px;
+  height: 64px;
   position: sticky;
   left: var(--year-col-w);
   z-index: 13;
 }
 
 .headerEmployee {
-  width: var(--month-col-w);
-  min-width: var(--month-col-w);
-  max-width: var(--month-col-w);
-  height: 80px;
-  padding: 4px 6px;
+  min-width: max(80px, var(--month-col-w));
+  width: auto;
+  height: 64px;
+  padding: 4px 8px;
   vertical-align: middle;
   text-align: center;
   position: sticky;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
 }
 
@@ -95,9 +109,6 @@
   font-weight: 600;
   font-size: 11px;
   line-height: 1.25;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
 }
@@ -105,9 +116,8 @@
 .monthCell {
   width: var(--year-col-w);
   min-width: var(--year-col-w);
-  max-width: var(--year-col-w);
   background: #ffffff;
-  padding: 0;
+  padding: 4px 4px;
   vertical-align: middle;
   text-align: center;
   position: sticky;
@@ -116,20 +126,20 @@
 }
 
 .monthLabel {
-  display: inline-block;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
+  display: block;
+  writing-mode: horizontal-tb;
+  transform: none;
   font-weight: 600;
-  font-size: 0.85rem;
-  line-height: 1.2;
-  padding: 8px 4px;
-  max-height: 180px;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  padding: 4px 2px;
+  text-align: center;
+  white-space: normal;
 }
 
 .labelCell {
   width: var(--label-col-w);
   min-width: var(--label-col-w);
-  max-width: var(--label-col-w);
   text-align: left;
   font-weight: normal;
   padding-left: 8px;
@@ -157,7 +167,7 @@
 }
 
 .rowBemerkung {
-  height: 32px;
+  height: 30px;
 }
 
 .rowBemerkung td:not(.monthCell) {
@@ -165,19 +175,22 @@
 }
 
 .dataCell {
-  width: var(--month-col-w);
-  min-width: var(--month-col-w);
-  max-width: var(--month-col-w);
+  min-width: max(80px, var(--month-col-w));
+  min-height: 0;
+  width: auto;
   text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: visible;
   font-size: 0.85rem;
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 .cellInput {
   width: 100%;
   height: 100%;
-  min-height: 20px;
+  min-height: 22px;
   margin: 0;
   padding: 0;
   border: none;
@@ -200,7 +213,9 @@
   padding-left: 6px;
   font-weight: normal;
   min-width: 220px;
-  max-width: 260px;
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .totalMonthCell {
@@ -208,4 +223,74 @@
   text-align: left;
   padding-left: 8px;
   background: #ffffff;
+}
+
+.printOuter {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+@media print {
+  .printOuter {
+    width: max-content !important;
+    min-width: 100% !important;
+    max-width: none !important;
+  }
+
+  .root {
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .topScroll {
+    display: none !important;
+  }
+
+  .bottomScroll {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  .table {
+    table-layout: auto !important;
+    width: max-content !important;
+    min-width: 100% !important;
+  }
+
+  .cell {
+    overflow: visible !important;
+  }
+}
+
+/* PDF capture only — keeps previous row/cell heights in exports (html2canvas). */
+.pdfExportCapture .headerLabelSpacer,
+.pdfExportCapture .headerEmployee {
+  height: 80px;
+}
+
+.pdfExportCapture .rowGeleistete {
+  height: 44px;
+}
+
+.pdfExportCapture .rowSecondary {
+  height: 40px;
+}
+
+.pdfExportCapture .rowBemerkung {
+  height: 42px;
+}
+
+.pdfExportCapture .dataCell {
+  min-height: 36px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.pdfExportCapture .cellInput {
+  min-height: 32px;
+  padding: 2px 0;
 }
