@@ -153,7 +153,7 @@ export default function MontatsplanerPage() {
   return (
     <AuthGuard>
       <Layout>
-        <div className="print:bg-white w-full min-w-0 max-w-[100vw]">
+        <div className="print:bg-white w-full min-w-0 max-w-full">
           {error ? (
             <p className="mb-4 text-sm text-red-600 print:hidden" role="alert">
               {error}

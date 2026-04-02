@@ -27,6 +27,8 @@
   flex: none;
   overflow-x: auto;
   overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   border: 1px solid #cfd6de;
   border-bottom: none;
   border-left: none;
@@ -43,6 +45,8 @@
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   position: relative;
 }
 
@@ -230,6 +234,22 @@
   width: max-content;
   min-width: 100%;
   max-width: none;
+}
+
+@media (max-width: 1023.98px) {
+  .root {
+    font-size: 11px;
+  }
+
+  .cellInput {
+    min-height: 40px;
+  }
+
+  .rowGeleistete,
+  .rowSecondary,
+  .rowBemerkung {
+    height: auto;
+  }
 }
 
 @media print {

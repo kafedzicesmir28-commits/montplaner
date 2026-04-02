@@ -285,15 +285,15 @@ export default function PlannerGrid({
   if (!storesLoaded) return null;
 
   return (
-    <div ref={gridRef} className="rounded-lg border border-gray-200 bg-white shadow-sm">
-      <div ref={topScrollRef} className="overflow-x-auto print:hidden">
+    <div ref={gridRef} className="min-w-0 rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div ref={topScrollRef} className="overflow-x-auto print:hidden touch-pan-x">
         <div style={{ width: tableWidth, height: 1 }} aria-hidden />
       </div>
-      <div ref={bottomScrollRef} className="overflow-x-auto print:overflow-visible">
+      <div ref={bottomScrollRef} className="overflow-x-auto print:overflow-visible touch-pan-x">
         <div className="inline-block min-w-full align-middle">
           <div className="bg-white">
           <table
-            className="min-w-full border-collapse text-gray-900"
+            className="w-max min-w-full border-collapse text-gray-900"
             style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
           >
             <thead>

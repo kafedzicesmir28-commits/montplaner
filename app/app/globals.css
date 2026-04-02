@@ -24,7 +24,18 @@ body {
 }
 
 * {
+  box-sizing: border-box;
   border-color: var(--border);
+}
+
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
 }
 
 a {
@@ -45,6 +56,11 @@ button {
 
 table {
   background: #fff;
+}
+
+img,
+table {
+  max-width: 100%;
 }
 
 th,
@@ -104,4 +120,23 @@ td {
   margin-right: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
+}
+
+@media (max-width: 1023.98px) {
+  body {
+    font-size: 95%;
+  }
+
+  button,
+  a,
+  select,
+  input,
+  textarea {
+    min-height: 40px;
+  }
+
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
 }
