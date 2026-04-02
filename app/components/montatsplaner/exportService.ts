@@ -5,7 +5,7 @@ import montatsplanerStyles from './montatsplaner.module.css';
 import type { HeaderEmployee } from './HeaderRow';
 import type { PlannerData } from './plannerTypes';
 import { MONTH_KEYS } from './plannerTypes';
-import { computeMonthRowTotals, computeYearTotals } from './totalsCalculator';
+import { computeMonthRowTotals } from './totalsCalculator';
 
 const MONTH_LABELS_DE = [
   'Januar',
@@ -30,6 +30,7 @@ const ROW_LABELS = [
   'bezogene Ferien',
   'Bemerkung',
 ] as const;
+const NUMERIC_ROW_INDEXES = [0, 1, 2, 3, 4] as const;
 
 const BORDER: Partial<ExcelJS.Borders> = {
   top: { style: 'thin', color: { argb: 'FFCFD6DE' } },
@@ -51,9 +52,11 @@ export async function exportPlannerExcel(params: {
 }): Promise<void> {
   const { year, employees, data } = params;
   const wb = new ExcelJS.Workbook();
+  wb.calcProperties.fullCalcOnLoad = true;
   const ws = wb.addWorksheet('Montatsplaner', {
     properties: { defaultRowHeight: 18 },
   });
+  const monthMetricRowsByIndex = new Map<number, number[]>();
 
   ws.columns = [
     { width: 10 },
@@ -91,6 +94,11 @@ export async function exportPlannerExcel(params: {
     monthCell.border = BORDER as ExcelJS.Borders;
 
     for (let rowIdx = 0; rowIdx < 6; rowIdx++) {
+      if (rowIdx < ROW_LABELS.length) {
+        const existing = monthMetricRowsByIndex.get(rowIdx) ?? [];
+        existing.push(r + rowIdx);
+        monthMetricRowsByIndex.set(rowIdx, existing);
+      }
       const row = ws.getRow(r + rowIdx);
       const labelCell = row.getCell(2);
       labelCell.value = ROW_LABELS[rowIdx];
@@ -146,22 +154,23 @@ export async function exportPlannerExcel(params: {
     const fg = fillForRow(rowIdx);
     labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fg } };
 
-    employees.forEach((emp, ci) => {
-      const yt = computeYearTotals(data, emp.id);
-      const v =
-        rowIdx === 0
-          ? yt.geleistete
-          : rowIdx === 1
-            ? yt.nacht
-            : rowIdx === 2
-              ? yt.sonntag
-              : rowIdx === 3
-                ? yt.krank
-                : rowIdx === 4
-                  ? yt.ferien
-                  : yt.bemerkung;
+    employees.forEach((_, ci) => {
       const cell = row.getCell(3 + ci);
-      cell.value = rowIdx === 5 ? v : typeof v === 'number' ? Number(v.toFixed(1)) : v;
+      const col = cell.address.replace(/\d+/g, '');
+      const monthRowsForMetric = monthMetricRowsByIndex.get(rowIdx) ?? [];
+      if (NUMERIC_ROW_INDEXES.includes(rowIdx as (typeof NUMERIC_ROW_INDEXES)[number])) {
+        const refs = monthRowsForMetric.map((rowNo) => `${col}${rowNo}`);
+        cell.value =
+          refs.length > 0
+            ? { formula: `SUM(${refs.join(',')})` }
+            : 0;
+      } else {
+        const refs = monthRowsForMetric.map((rowNo) => `${col}${rowNo}`);
+        cell.value =
+          refs.length > 0
+            ? { formula: `TEXTJOIN(" | ",TRUE,${refs.join(',')})` }
+            : '';
+      }
       cell.font = { size: 11, name: 'Arial' };
       cell.border = BORDER as ExcelJS.Borders;
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fg } };

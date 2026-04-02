@@ -2,6 +2,7 @@ import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import {
   BarChart3,
+  CalendarRange,
   CalendarClock,
   CalendarDays,
   DollarSign,
@@ -65,6 +66,16 @@ const primaryCards: DashboardCard[] = [
     iconColor: 'text-indigo-700',
     iconBg: 'bg-indigo-100',
   },
+  {
+    href: '/monatsplaner',
+    title: 'Monatsplaner',
+    description: 'Direkter Zugriff auf den Monatsplaner.',
+    accent: 'from-fuchsia-50 to-fuchsia-100/70 border-fuchsia-100',
+    dot: 'bg-fuchsia-400',
+    icon: CalendarRange,
+    iconColor: 'text-fuchsia-700',
+    iconBg: 'bg-fuchsia-100',
+  },
 ];
 
 const secondaryCards: DashboardCard[] = [
@@ -116,7 +127,7 @@ export default function DashboardPage() {
             <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
               {t.dashboardPrimarySection}
             </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {primaryCards.map((card) => (
                 <Link
                   key={card.href}
