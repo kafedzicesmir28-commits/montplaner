@@ -219,14 +219,10 @@ export default function EmployeeMonthlyReportPage() {
           {monthTotals ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
               <p className="mb-2 font-semibold text-gray-900">Month totals (planner — effective = Schicht − Pause)</p>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-6">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-5">
                 <div>
                   <dt className="text-gray-500">Effective hours (payroll base)</dt>
                   <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(monthTotals.total_hours)}</dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Daytime share (info)</dt>
-                  <dd className="font-medium tabular-nums">{formatWorkHoursDisplay(monthTotals.normal_hours)}</dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Night share (info)</dt>

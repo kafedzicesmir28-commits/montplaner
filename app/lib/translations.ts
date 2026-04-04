@@ -94,6 +94,10 @@ export const t = {
   plannerPauseAbbrev: 'P',
   plannerBreakSelect: 'Pause',
   plannerBreakNone: 'Keine',
+  plannerClickAssignTitle: 'Schicht zuweisen',
+  plannerClickAssignChooseStore: 'Filiale wählen',
+  plannerClickAssignChooseShift: 'Schicht wählen',
+  plannerNoShiftsForStore: 'Keine Schichten für diese Filiale.',
 
   // Vacations
   vacationsTitle: 'Urlaub (Ferie)',
@@ -105,6 +109,8 @@ export const t = {
   day: 'Tag',
   areYouSureDeleteVacation: 'Sind Sie sicher, dass Sie diesen Urlaub löschen möchten?',
   endDateAfterStartDate: 'Das Enddatum muss nach dem Startdatum liegen',
+  vacationsPrint: 'Drucken',
+  vacationsPrintTitle: 'Ferienplan',
 
   // Accountant
   accountantViewTitle: 'Buchhalteransicht',
@@ -115,7 +121,6 @@ export const t = {
   accountantPeriodLabel: 'Auswertungszeitraum',
   accountantExportCsv: 'CSV exportieren',
   effectiveWorkHours: 'Efektive Arbeitsstunden',
-  daytimeHoursInfo: 'Tag (Info)',
   nightHoursInfo: 'Nacht (Info)',
   sundayHoursInfo: 'Sonntag (Info)',
   normalHours: 'Normalstunden',

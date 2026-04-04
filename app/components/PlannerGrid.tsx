@@ -7,6 +7,7 @@ import { calculateEmployeeHours } from '@/lib/hoursCalculator';
 import { formatDate, formatWorkHoursDisplay, isDateInVacation } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerCell, { type PlannerAssignment } from '@/components/PlannerCell';
+import { PlannerClickAssignModal } from '@/components/PlannerClickAssignModal';
 import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type StoreRow = Store & { color?: string | null };
@@ -169,6 +170,13 @@ export default function PlannerGrid({
 }: PlannerGridProps) {
   const weekSegments = useMemo(() => segmentDaysByISOWeek(days), [days]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [clickAssignTarget, setClickAssignTarget] = useState<{
+    employeeId: string;
+    dateStr: string;
+    employeeName: string;
+    dateLabel: string;
+    assignmentId: string | undefined;
+  } | null>(null);
   const [positionInputByEmployee, setPositionInputByEmployee] = useState<Record<string, string>>({});
   const gridRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -227,6 +235,7 @@ export default function PlannerGrid({
   const monthAnchor = days.length ? formatDate(days[0]!) : '';
   useEffect(() => {
     setEditingKey(null);
+    setClickAssignTarget(null);
   }, [monthAnchor]);
 
   useEffect(() => {
@@ -470,6 +479,12 @@ export default function PlannerGrid({
 
                       const cellKey = `${employee.id}:${dateStr}`;
                       const isUnavailable = unavailableDayKeySet.has(cellKey);
+                      const dateLabel = day.toLocaleDateString('de-DE', {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      });
                       return (
                         <PlannerCell
                           key={`${employee.id}-${dateStr}`}
@@ -501,6 +516,18 @@ export default function PlannerGrid({
                           onActivate={() => {
                             if (!readOnly && !isVacation && !isUnavailable) setEditingKey(cellKey);
                           }}
+                          onClickAssignEmpty={
+                            enableStoreDrop && !readOnly && stores.length > 0
+                              ? () =>
+                                  setClickAssignTarget({
+                                    employeeId: employee.id,
+                                    dateStr,
+                                    employeeName: employee.name,
+                                    dateLabel,
+                                    assignmentId: assignment?.id,
+                                  })
+                              : undefined
+                          }
                           onSaved={onAssignmentsUpdated}
                           onCloseCellEdit={() => setEditingKey(null)}
                         />
@@ -540,6 +567,21 @@ export default function PlannerGrid({
           </div>
         </div>
       </div>
+
+      {clickAssignTarget ? (
+        <PlannerClickAssignModal
+          open
+          employeeName={clickAssignTarget.employeeName}
+          dateLabel={clickAssignTarget.dateLabel}
+          employeeId={clickAssignTarget.employeeId}
+          dateStr={clickAssignTarget.dateStr}
+          assignmentId={clickAssignTarget.assignmentId}
+          stores={stores}
+          shifts={shifts}
+          onClose={() => setClickAssignTarget(null)}
+          onSaved={onAssignmentsUpdated}
+        />
+      ) : null}
     </div>
   );
 }

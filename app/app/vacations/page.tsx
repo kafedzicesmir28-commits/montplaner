@@ -303,18 +303,18 @@ export default function VacationsPage() {
         ) : (
         <div className="space-y-6">
           {overlapWarning ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 print:hidden">
               {overlapWarning}
             </div>
           ) : null}
 
           {heavyOverlapDays.length > 0 ? (
-            <div className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800">
+            <div className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-800 print:hidden">
               Mehrfach-Urlaub erkannt: {heavyOverlapDays.length} Tag(e) haben gleichzeitige Antrage.
             </div>
           ) : null}
 
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between print:hidden">
             <h1 className="text-3xl font-bold text-gray-900">{t.vacationsTitle}</h1>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -332,6 +332,14 @@ export default function VacationsPage() {
                 </select>
               </label>
               <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              >
+                {t.vacationsPrint}
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowModal(true)}
                 className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
               >
@@ -340,76 +348,99 @@ export default function VacationsPage() {
             </div>
           </div>
 
-          <div className="overflow-auto rounded-lg border border-gray-300 bg-white shadow-sm">
-            <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800">
+          <div
+            id="vacations-print-area"
+            className="vacations-print-area overflow-auto rounded-lg border border-gray-300 bg-white shadow-sm print:overflow-visible print:shadow-none print:rounded-none"
+          >
+            <div className="hidden print:block print:border-b print:border-gray-400 print:bg-white print:px-2 print:py-3">
+              <h1 className="text-xl font-bold text-gray-900">
+                {t.vacationsPrintTitle} {selectedYear}
+              </h1>
+              <p className="mt-1 text-sm text-gray-600">{t.vacationsTitle}</p>
+            </div>
+            <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 print:border-gray-400 print:bg-gray-100 print:py-2.5 print:text-base">
               Ferienplan {selectedYear}
             </div>
-            <table className="border-collapse text-xs">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="sticky left-0 z-20 border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold">
-                    Name
-                  </th>
-                  {monthSpans.map((m, idx) => (
-                    <th
-                      key={`${m.monthIndex}-${idx}`}
-                      colSpan={m.count}
-                      className="border border-gray-300 px-2 py-2 text-center font-semibold"
-                    >
-                      {MONTH_SHORT[m.monthIndex]}
+            <div className="vacations-print-table-wrap overflow-x-auto print:overflow-visible">
+              <table className="vacations-print-table w-full min-w-max border-collapse text-xs print:text-[11px]">
+                <thead>
+                  <tr className="bg-gray-100 print:bg-gray-100">
+                    <th className="sticky left-0 z-20 border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold print:static print:z-0 print:px-2 print:py-2 print:text-sm">
+                      Name
                     </th>
-                  ))}
-                </tr>
-                <tr className="bg-gray-50">
-                  <th className="sticky left-0 z-20 border border-gray-300 bg-gray-50 px-3 py-1 text-left font-semibold">
-                    Woche
-                  </th>
-                  {weeks.map((w) => (
-                    <th key={w.weekNumber} className="border border-gray-300 px-1 py-1 text-[10px] font-medium">
-                      {w.weekNumber}
+                    {monthSpans.map((m, idx) => (
+                      <th
+                        key={`${m.monthIndex}-${idx}`}
+                        colSpan={m.count}
+                        className="border border-gray-300 px-2 py-2 text-center font-semibold print:px-1.5 print:py-2 print:text-xs"
+                      >
+                        {MONTH_SHORT[m.monthIndex]}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="bg-gray-50 print:bg-gray-50">
+                    <th className="sticky left-0 z-20 border border-gray-300 bg-gray-50 px-3 py-1 text-left font-semibold print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
+                      Woche
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {employees.map((emp, rowIdx) => {
-                  const empVac = vacationsByEmployee.get(emp.id) ?? [];
-                  return (
-                    <tr key={emp.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900">
-                        {emp.name}
-                      </td>
-                      {weeks.map((w) => {
-                        const vacDaysInWeek = empVac.reduce((sum, v) => {
-                          const s = toDateOnly(v.start_date);
-                          const e = toDateOnly(v.end_date);
-                          if (!intersects(s, e, w.start, w.end)) return sum;
-                          const start = s > w.start ? s : w.start;
-                          const end = e < w.end ? e : w.end;
-                          const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-                          return sum + Math.max(0, days);
-                        }, 0);
-                        const active = vacDaysInWeek > 0;
-                        return (
-                          <td
-                            key={`${emp.id}-${w.weekNumber}`}
-                            title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
-                            className={`h-6 min-w-6 border border-gray-300 text-center ${
-                              active ? 'bg-red-400/80 text-white' : ''
-                            }`}
-                          >
-                            {active ? vacDaysInWeek : ''}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    {weeks.map((w) => (
+                      <th
+                        key={w.weekNumber}
+                        className="border border-gray-300 px-1 py-1 text-[10px] font-medium print:min-w-[1.5rem] print:px-0.5 print:py-1.5 print:text-[10px]"
+                      >
+                        {w.weekNumber}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map((emp, rowIdx) => {
+                    const empVac = vacationsByEmployee.get(emp.id) ?? [];
+                    return (
+                      <tr key={emp.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900 print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
+                          {emp.name}
+                        </td>
+                        {(() => {
+                          let consecutiveVacationIndex = 0;
+                          return weeks.map((w) => {
+                            const vacDaysInWeek = empVac.reduce((sum, v) => {
+                              const s = toDateOnly(v.start_date);
+                              const e = toDateOnly(v.end_date);
+                              if (!intersects(s, e, w.start, w.end)) return sum;
+                              const start = s > w.start ? s : w.start;
+                              const end = e < w.end ? e : w.end;
+                              const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+                              return sum + Math.max(0, days);
+                            }, 0);
+                            const active = vacDaysInWeek > 0;
+                            let vacationToneClass = '';
+                            if (active) {
+                              vacationToneClass =
+                                consecutiveVacationIndex % 2 === 0 ? 'vacation-red' : 'vacation-orange';
+                              consecutiveVacationIndex += 1;
+                            } else {
+                              consecutiveVacationIndex = 0;
+                            }
+                            return (
+                              <td
+                                key={`${emp.id}-${w.weekNumber}`}
+                                title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
+                                className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}`}
+                              >
+                                {active ? vacDaysInWeek : ''}
+                              </td>
+                            );
+                          });
+                        })()}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="rounded-lg bg-white shadow overflow-hidden">
+          <div className="rounded-lg bg-white shadow overflow-hidden print:hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -475,7 +506,7 @@ export default function VacationsPage() {
             </table>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow print:hidden">
             <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800">
               Wochenubersicht aller Mitarbeiter (Urlaubstage pro Woche)
             </div>
@@ -514,7 +545,7 @@ export default function VacationsPage() {
           </div>
 
           {showModal && (
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="fixed inset-0 z-50 h-full w-full overflow-y-auto bg-gray-600 bg-opacity-50 print:hidden">
               <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">
                   {editingVacation ? t.editVacation : t.addVacation}
@@ -584,6 +615,35 @@ export default function VacationsPage() {
         </div>
         )}
       </Layout>
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 10mm;
+          }
+          html,
+          body {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #fff !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .vacations-print-area,
+          .vacations-print-table-wrap {
+            overflow: visible !important;
+            max-height: none !important;
+          }
+          .vacations-print-table {
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: auto !important;
+          }
+        }
+      `}</style>
     </AuthGuard>
   );
 }

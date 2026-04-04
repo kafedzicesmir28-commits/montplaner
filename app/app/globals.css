@@ -58,6 +58,17 @@ table {
   background: #fff;
 }
 
+/* /vacations Ferienplan: consecutive vacation weeks alternate (logic in page, not row index). */
+.vacation-red {
+  background-color: rgb(248 113 113 / 0.8);
+  color: #fff;
+}
+
+.vacation-orange {
+  background-color: #ffa94d;
+  color: #fff;
+}
+
 img,
 table {
   max-width: 100%;
@@ -82,6 +93,20 @@ td {
   body {
     background: #fff !important;
     color: #111 !important;
+  }
+
+  .vacation-red {
+    background-color: #ef4444 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .vacation-orange {
+    background-color: #f97316 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .planner-print-area {

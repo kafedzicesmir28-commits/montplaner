@@ -5,6 +5,12 @@ import type { Shift, ShiftAssignment, Store } from '@/types/database';
 import { supabase } from '@/lib/supabaseClient';
 import { effectiveBreakMinutes, formatErrorMessage } from '@/lib/utils';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
+import {
+  PLANNER_BREAK_OPTIONS,
+  shiftsForStore,
+  snapToPlannerBreakMinutes,
+  upsertQuickPlannerShift,
+} from '@/lib/plannerShiftQuickAssign';
 import { t } from '@/lib/translations';
 import { resolveStoreColor } from '@/lib/storeColors';
 
@@ -12,17 +18,6 @@ export type PlannerAssignment = ShiftAssignment & {
   custom_start_time?: string | null;
   custom_end_time?: string | null;
 };
-
-const PLANNER_BREAK_OPTIONS = [0, 30, 45, 60] as const;
-
-function snapToPlannerBreakMinutes(raw: number): (typeof PLANNER_BREAK_OPTIONS)[number] {
-  const r = Math.max(0, Math.floor(Number(raw) || 0));
-  if ((PLANNER_BREAK_OPTIONS as readonly number[]).includes(r)) return r as (typeof PLANNER_BREAK_OPTIONS)[number];
-  if (r < 15) return 0;
-  if (r < 38) return 30;
-  if (r < 53) return 45;
-  return 60;
-}
 
 type StoreForPlanner = Pick<Store, 'id' | 'name'> & { color?: string | null };
 const VACATION_BG = '#bbf7d0';
@@ -136,10 +131,6 @@ const TIME_OPTIONS = Array.from({ length: 144 }, (_, i) => {
   return `${h}:${m}`;
 });
 
-function shiftAllowedForStore(shift: Shift, storeId: string): boolean {
-  return !Boolean(shift.is_global) && shift.store_id === storeId;
-}
-
 export type PlannerCellProps = {
   employeeId: string;
   dateStr: string;
@@ -164,6 +155,8 @@ export type PlannerCellProps = {
   /** Optional store-section row tint applied to the cell background only. */
   rowBackgroundColor?: string;
   onActivate: () => void;
+  /** Empty cell: open click-to-assign flow (store → shift modal) instead of inline editor. */
+  onClickAssignEmpty?: () => void;
   onSaved: () => void | Promise<void>;
   /** Clears grid editing state after delete (avoids stuck editor on empty cell). */
   onCloseCellEdit?: () => void;
@@ -192,6 +185,7 @@ export default function PlannerCell({
   weekDividerRight = false,
   rowBackgroundColor,
   onActivate,
+  onClickAssignEmpty,
   onSaved,
   onCloseCellEdit,
 }: PlannerCellProps) {
@@ -270,14 +264,7 @@ export default function PlannerCell({
   const selectedStoreId = forceStoreId ?? storeId ?? pendingStoreId ?? assignment?.store_id ?? '';
   const selectedStore = stores.find((s) => s.id === selectedStoreId);
   const selectedStoreColor = resolveStoreBackgroundColor(selectedStore);
-  const availableShifts = (selectedStoreId
-    ? shifts.filter((s) => shiftAllowedForStore(s, selectedStoreId))
-    : []
-  ).slice().sort((a, b) => {
-    const g = Number(Boolean(a.is_global)) - Number(Boolean(b.is_global));
-    if (g !== 0) return g;
-    return String(a.start_time).localeCompare(String(b.start_time));
-  });
+  const availableShifts = selectedStoreId ? shiftsForStore(shifts, selectedStoreId) : [];
 
   useEffect(() => {
     if (!isEditing) return;
@@ -393,37 +380,21 @@ export default function PlannerCell({
     setBreakMinutes(snapToPlannerBreakMinutes(selectedShift.break_minutes ?? 0));
 
     try {
-      const payload = {
-        employee_id: employeeId,
-        date: dateStr,
-        shift_id: nextShiftId,
-        store_id: effectiveStoreId,
-        assignment_type: 'SHIFT' as const,
-        custom_start_time: null,
-        custom_end_time: null,
-        custom_break_minutes: snapToPlannerBreakMinutes(selectedShift.break_minutes ?? 0),
-      };
-
-      if (assignment) {
-        const { error } = await supabase
-          .from('shift_assignments')
-          .update(payload)
-          .eq('id', assignment.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('shift_assignments')
-          .upsert(payload, { onConflict: 'employee_id,date' });
-        if (error) throw error;
+      const result = await upsertQuickPlannerShift({
+        employeeId,
+        dateStr,
+        shiftId: nextShiftId,
+        storeId: effectiveStoreId,
+        assignmentId: assignment?.id,
+        breakMinutes: snapToPlannerBreakMinutes(selectedShift.break_minutes ?? 0),
+      });
+      if (!result.ok) {
+        setSaveError(result.message);
+        console.error('PlannerCell quick assign:', result.message);
+        return;
       }
-
       await onSaved();
-      notifyPlannerAssignmentsChanged();
       onCloseCellEdit?.();
-    } catch (e: unknown) {
-      const msg = formatErrorMessage(e);
-      setSaveError(msg);
-      console.error('PlannerCell quick assign:', msg, e);
     } finally {
       setSaving(false);
     }
@@ -526,6 +497,15 @@ export default function PlannerCell({
 
   const handleCellClick = () => {
     if (isVacation || readOnly || isUnavailable) return;
+    const type = assignment?.assignment_type ?? 'SHIFT';
+    const statusOnly = type === 'KRANK' || type === 'FREI' || type === 'FERIEN';
+    const hasPersistedShift = Boolean(assignment?.shift_id);
+    const openClickAssignModal =
+      Boolean(onClickAssignEmpty) && !pendingStoreId && !statusOnly && !hasPersistedShift;
+    if (openClickAssignModal) {
+      onClickAssignEmpty?.();
+      return;
+    }
     onActivate();
   };
 
@@ -717,7 +697,7 @@ export default function PlannerCell({
             <div className="mb-0.5 flex flex-col gap-2 p-2">
               {availableShifts.length === 0 ? (
                 <div className="rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-[10px] text-blue-800">
-                  No shifts available for this store.
+                  {t.plannerNoShiftsForStore}
                 </div>
               ) : (
                 availableShifts.map((s, idx) => (

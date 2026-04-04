@@ -165,7 +165,6 @@ export default function AccountantPage() {
     const headers = [
       'Mitarbeiter',
       'Efektive Arbeitsstunden (h)',
-      'Tag Anteil Info (h)',
       'Nacht Anteil Info (h)',
       'Sonntag Anteil Info (h)',
       'Urlaub (Tage)',
@@ -179,7 +178,6 @@ export default function AccountantPage() {
         [
           d.employee_name,
           formatHours(d.total_hours),
-          formatHours(d.normal_hours),
           formatHours(d.night_hours),
           formatHours(d.sunday_hours),
           formatDays(d.vacation_days),
@@ -191,7 +189,6 @@ export default function AccountantPage() {
       ),
     ];
     if (hoursData.length > 0) {
-      const sumNormal = hoursData.reduce((s, d) => s + d.normal_hours, 0);
       const sumNight = hoursData.reduce((s, d) => s + d.night_hours, 0);
       const sumSun = hoursData.reduce((s, d) => s + d.sunday_hours, 0);
       const sumTot = hoursData.reduce((s, d) => s + d.total_hours, 0);
@@ -201,7 +198,6 @@ export default function AccountantPage() {
         [
           t.total,
           formatHours(sumTot),
-          formatHours(sumNormal),
           formatHours(sumNight),
           formatHours(sumSun),
           formatDays(sumVac),
@@ -281,7 +277,7 @@ export default function AccountantPage() {
                     {t.employee}
                   </th>
                   <th
-                    colSpan={4}
+                    colSpan={3}
                     scope="colgroup"
                     className="border-b border-gray-200 px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-700"
                   >
@@ -297,7 +293,6 @@ export default function AccountantPage() {
                 </tr>
                 <tr>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-700">{t.effectiveWorkHours}</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.daytimeHoursInfo}</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.nightHoursInfo}</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.sundayHoursInfo}</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">{t.vacationDays}</th>
@@ -310,9 +305,6 @@ export default function AccountantPage() {
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900">{data.employee_name}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold text-gray-900">
                       {formatHours(data.total_hours)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-gray-800">
-                      {formatHours(data.normal_hours)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-gray-800">
                       {formatHours(data.night_hours)}
@@ -330,7 +322,7 @@ export default function AccountantPage() {
                 ))}
                 {hoursData.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
                       {t.noDataAvailable}
                     </td>
                   </tr>
@@ -342,9 +334,6 @@ export default function AccountantPage() {
                     <td className="whitespace-nowrap px-4 py-3 font-bold text-gray-900">{t.total}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
                       {formatHours(hoursData.reduce((sum, data) => sum + data.total_hours, 0))}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
-                      {formatHours(hoursData.reduce((sum, data) => sum + data.normal_hours, 0))}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-bold text-gray-900">
                       {formatHours(hoursData.reduce((sum, data) => sum + data.night_hours, 0))}
