@@ -9,6 +9,16 @@ export function resolveStoreColor(value: string | null | undefined): string {
   return parseStoreHexColor(value) ?? '#e7e6e6';
 }
 
+/** Planner / reports: always derive fill color from the live `stores` list (never embedded/join-only snapshots). */
+export function getStoreColor(
+  storeId: string | null | undefined,
+  stores: ReadonlyArray<{ id: string; color?: string | null }>
+): string {
+  if (!storeId) return resolveStoreColor(undefined);
+  const row = stores.find((s) => s.id === storeId);
+  return resolveStoreColor(row?.color);
+}
+
 export function storeTextColor(bg: string): string {
   const h = bg.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;

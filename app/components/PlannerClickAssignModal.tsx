@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import type { Shift, Store } from '@/types/database';
-import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
+import { getStoreColor, storeTextColor } from '@/lib/storeColors';
 import {
   shiftsForStore,
   snapToPlannerBreakMinutes,
@@ -82,7 +82,7 @@ export function PlannerClickAssignModal({
   }, [onClose]);
 
   const selectedStore = useMemo(() => stores.find((s) => s.id === storeId), [stores, storeId]);
-  const storeColor = resolveStoreColor(selectedStore?.color);
+  const storeColor = getStoreColor(storeId, stores);
   const availableShifts = useMemo(() => (storeId ? shiftsForStore(shifts, storeId) : []), [shifts, storeId]);
 
   const handlePickStore = useCallback((id: string) => {
@@ -148,7 +148,7 @@ export function PlannerClickAssignModal({
             </p>
             <div className="flex flex-col gap-2">
               {stores.map((s) => {
-                const bg = resolveStoreColor(s.color);
+                const bg = getStoreColor(s.id, stores);
                 const fg = storeTextColor(bg);
                 return (
                   <button

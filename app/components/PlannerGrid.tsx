@@ -8,7 +8,6 @@ import { formatDate, formatWorkHoursDisplay, isDateInVacation } from '@/lib/util
 import { t } from '@/lib/translations';
 import PlannerCell, { type PlannerAssignment } from '@/components/PlannerCell';
 import { PlannerClickAssignModal } from '@/components/PlannerClickAssignModal';
-import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
 
 type StoreRow = Store & { color?: string | null };
 type AssignmentWithStore = PlannerAssignment & { store?: StoreRow | null };
@@ -466,13 +465,7 @@ export default function PlannerGrid({
                       const dateStr = formatDate(day);
                       const assignment = assignmentByKey.get(`${employee.id}:${dateStr}`);
                       const isVacation = isVacationDay(vacations, employee.id, dateStr);
-                      const relationalStore = assignment?.store as StoreRow | StoreRow[] | null | undefined;
-                      const resolvedRelationalStore = Array.isArray(relationalStore)
-                        ? relationalStore[0]
-                        : relationalStore;
-                      const store =
-                        resolvedRelationalStore ??
-                        (assignment?.store_id ? storeMap.get(assignment.store_id) : undefined);
+                      const store = assignment?.store_id ? storeMap.get(assignment.store_id) : undefined;
                       const shift = assignment?.shift_id ? shiftById(shifts, assignment.shift_id) : undefined;
                       const cellHours = getHoursForAssignment(assignment, shift);
                       weekTotal += cellHours;

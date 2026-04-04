@@ -12,7 +12,7 @@ import {
   upsertQuickPlannerShift,
 } from '@/lib/plannerShiftQuickAssign';
 import { t } from '@/lib/translations';
-import { resolveStoreColor } from '@/lib/storeColors';
+import { getStoreColor } from '@/lib/storeColors';
 
 export type PlannerAssignment = ShiftAssignment & {
   custom_start_time?: string | null;
@@ -28,9 +28,6 @@ const FREI_BG = '#d1d5db';
 const FREI_FG = '#1f2937';
 const EMPTY_BG = '#f9fafb';
 const EMPTY_FG = '#9ca3af';
-function resolveStoreBackgroundColor(store: StoreForPlanner | undefined): string {
-  return resolveStoreColor(store?.color);
-}
 
 function withAlpha(hex: string, alpha: number): string {
   const rgb = hexToRgb(hex);
@@ -262,8 +259,7 @@ export default function PlannerCell({
   }, [forceStoreId]);
 
   const selectedStoreId = forceStoreId ?? storeId ?? pendingStoreId ?? assignment?.store_id ?? '';
-  const selectedStore = stores.find((s) => s.id === selectedStoreId);
-  const selectedStoreColor = resolveStoreBackgroundColor(selectedStore);
+  const selectedStoreColor = getStoreColor(selectedStoreId, stores);
   const availableShifts = selectedStoreId ? shiftsForStore(shifts, selectedStoreId) : [];
 
   useEffect(() => {
@@ -484,10 +480,10 @@ export default function PlannerCell({
     backgroundColor = FREI_BG;
     color = FREI_FG;
   } else if (selectedStoreId) {
-    backgroundColor = resolveStoreBackgroundColor(resolvedStoreForDisplay);
+    backgroundColor = getStoreColor(selectedStoreId, stores);
     color = contrastingForeground(backgroundColor);
   } else if (assignment && shift) {
-    backgroundColor = resolveStoreBackgroundColor(undefined);
+    backgroundColor = getStoreColor(assignment.store_id, stores);
     color = contrastingForeground(backgroundColor);
   } else {
     backgroundColor = EMPTY_BG;
