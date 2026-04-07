@@ -289,6 +289,31 @@ export default function VacationsPage() {
     }
     return map;
   }, [vacationsForYear]);
+  const weekColorMap = useMemo(() => {
+    const vacationWeeks = weeks
+      .filter((w) =>
+        vacationsForYear.some((v) =>
+          intersects(toDateOnly(v.start_date), toDateOnly(v.end_date), w.start, w.end)
+        )
+      )
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .map((w) => w.weekNumber);
+
+    const map: Record<number, 'red' | 'orange'> = {};
+    vacationWeeks.forEach((weekId, index) => {
+      map[weekId] = index % 2 === 0 ? 'red' : 'orange';
+    });
+    return map;
+  }, [weeks, vacationsForYear]);
+  const vacationsSortedByEmployeeName = useMemo(() => {
+    return [...vacations].sort((a, b) => {
+      const nameA = a.employee?.name || 'Unknown';
+      const nameB = b.employee?.name || 'Unknown';
+      const byName = nameA.localeCompare(nameB);
+      if (byName !== 0) return byName;
+      return a.start_date.localeCompare(b.start_date);
+    });
+  }, [vacations]);
   const yearOptions = useMemo(() => {
     const out: number[] = [];
     for (let y = new Date().getFullYear() - 1; y <= 2040; y++) out.push(y);
@@ -400,38 +425,35 @@ export default function VacationsPage() {
                         <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900 print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
                           {emp.name}
                         </td>
-                        {(() => {
-                          let consecutiveVacationIndex = 0;
-                          return weeks.map((w) => {
-                            const vacDaysInWeek = empVac.reduce((sum, v) => {
-                              const s = toDateOnly(v.start_date);
-                              const e = toDateOnly(v.end_date);
-                              if (!intersects(s, e, w.start, w.end)) return sum;
-                              const start = s > w.start ? s : w.start;
-                              const end = e < w.end ? e : w.end;
-                              const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-                              return sum + Math.max(0, days);
-                            }, 0);
-                            const active = vacDaysInWeek > 0;
-                            let vacationToneClass = '';
-                            if (active) {
-                              vacationToneClass =
-                                consecutiveVacationIndex % 2 === 0 ? 'vacation-red' : 'vacation-orange';
-                              consecutiveVacationIndex += 1;
-                            } else {
-                              consecutiveVacationIndex = 0;
-                            }
-                            return (
-                              <td
-                                key={`${emp.id}-${w.weekNumber}`}
-                                title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
-                                className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}`}
-                              >
-                                {active ? vacDaysInWeek : ''}
-                              </td>
-                            );
-                          });
-                        })()}
+                        {weeks.map((w) => {
+                          const vacDaysInWeek = empVac.reduce((sum, v) => {
+                            const s = toDateOnly(v.start_date);
+                            const e = toDateOnly(v.end_date);
+                            if (!intersects(s, e, w.start, w.end)) return sum;
+                            const start = s > w.start ? s : w.start;
+                            const end = e < w.end ? e : w.end;
+                            const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+                            return sum + Math.max(0, days);
+                          }, 0);
+                          const active = vacDaysInWeek > 0;
+                          const weekColor = weekColorMap[w.weekNumber];
+                          const vacationToneClass =
+                            active && weekColor === 'red'
+                              ? 'bg-red-300/90 print:bg-red-300/90'
+                              : active && weekColor === 'orange'
+                                ? 'bg-orange-300/90 print:bg-orange-300/90'
+                                : '';
+
+                          return (
+                            <td
+                              key={`${emp.id}-${w.weekNumber}`}
+                              title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
+                              className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}`}
+                            >
+                              {active ? vacDaysInWeek : ''}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
@@ -440,7 +462,7 @@ export default function VacationsPage() {
             </div>
           </div>
 
-          <div className="rounded-lg bg-white shadow overflow-hidden print:hidden">
+          <div className="vacations-data-table rounded-lg bg-white shadow overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -462,7 +484,7 @@ export default function VacationsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {vacations.map((vacation) => {
+                {vacationsSortedByEmployeeName.map((vacation) => {
                   const start = new Date(vacation.start_date);
                   const end = new Date(vacation.end_date);
                   const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -506,7 +528,7 @@ export default function VacationsPage() {
             </table>
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow print:hidden">
+          <div className="vacations-weekly-overview overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
             <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800">
               Wochenubersicht aller Mitarbeiter (Urlaubstage pro Woche)
             </div>
@@ -641,6 +663,16 @@ export default function VacationsPage() {
             width: 100% !important;
             max-width: 100% !important;
             table-layout: auto !important;
+          }
+          .vacations-data-table,
+          .vacations-weekly-overview {
+            break-inside: auto;
+            page-break-inside: auto;
+          }
+          .vacations-data-table tr,
+          .vacations-weekly-overview tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
         }
       `}</style>
