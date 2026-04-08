@@ -314,6 +314,13 @@ export default function VacationsPage() {
       return a.start_date.localeCompare(b.start_date);
     });
   }, [vacations]);
+  const printByTarget = (target: 'table' | 'list') => {
+    document.body.setAttribute('data-vacation-print-target', target);
+    window.print();
+    document.body.removeAttribute('data-vacation-print-target');
+  };
+  const printVacationTable = () => printByTarget('table');
+  const printVacationList = () => printByTarget('list');
   const yearOptions = useMemo(() => {
     const out: number[] = [];
     for (let y = new Date().getFullYear() - 1; y <= 2040; y++) out.push(y);
@@ -358,10 +365,17 @@ export default function VacationsPage() {
               </label>
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={printVacationTable}
                 className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
               >
-                {t.vacationsPrint}
+                Print Vacation Table
+              </button>
+              <button
+                type="button"
+                onClick={printVacationList}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              >
+                Print Vacation List
               </button>
               <button
                 type="button"
@@ -374,7 +388,7 @@ export default function VacationsPage() {
           </div>
 
           <div
-            id="vacations-print-area"
+            id="print-vacation-table"
             className="vacations-print-area overflow-auto rounded-lg border border-gray-300 bg-white shadow-sm print:overflow-visible print:shadow-none print:rounded-none"
           >
             <div className="hidden print:block print:border-b print:border-gray-400 print:bg-white print:px-2 print:py-3">
@@ -421,7 +435,7 @@ export default function VacationsPage() {
                   {employees.map((emp, rowIdx) => {
                     const empVac = vacationsByEmployee.get(emp.id) ?? [];
                     return (
-                      <tr key={emp.id} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <tr key={emp.id} className={rowIdx % 2 === 0 ? 'bg-blue-100' : 'bg-white'}>
                         <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900 print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
                           {emp.name}
                         </td>
@@ -462,7 +476,7 @@ export default function VacationsPage() {
             </div>
           </div>
 
-          <div className="vacations-data-table rounded-lg bg-white shadow overflow-hidden">
+          <div id="print-vacation-list" className="vacations-data-table rounded-lg bg-white shadow overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -639,40 +653,17 @@ export default function VacationsPage() {
       </Layout>
       <style jsx global>{`
         @media print {
-          @page {
-            size: landscape;
-            margin: 10mm;
-          }
-          html,
-          body {
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-            background: #fff !important;
-          }
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .vacations-print-area,
-          .vacations-print-table-wrap {
-            overflow: visible !important;
-            max-height: none !important;
+          body[data-vacation-print-target='table'] #print-vacation-list,
+          body[data-vacation-print-target='table'] .vacations-weekly-overview {
+            display: none !important;
           }
-          .vacations-print-table {
-            width: 100% !important;
-            max-width: 100% !important;
-            table-layout: auto !important;
-          }
-          .vacations-data-table,
-          .vacations-weekly-overview {
-            break-inside: auto;
-            page-break-inside: auto;
-          }
-          .vacations-data-table tr,
-          .vacations-weekly-overview tr {
-            break-inside: avoid;
-            page-break-inside: avoid;
+          body[data-vacation-print-target='list'] #print-vacation-table,
+          body[data-vacation-print-target='list'] .vacations-weekly-overview {
+            display: none !important;
           }
         }
       `}</style>

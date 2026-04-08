@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import ExcelJS from 'exceljs';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
@@ -28,20 +29,11 @@ function formatPeriodLabel(startYmd: string, endYmd: string): string {
   return `${s.toLocaleDateString('de-DE', opts)} – ${e.toLocaleDateString('de-DE', opts)}`;
 }
 
-function downloadCsv(filename: string, content: string) {
-  const bom = '\uFEFF';
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function escapeCsvCell(v: string): string {
-  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-  return v;
+function formatPeriodLabelCsv(startYmd: string, endYmd: string): string {
+  const s = parseYmdLocal(startYmd);
+  const e = parseYmdLocal(endYmd);
+  const opts: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+  return `${s.toLocaleDateString('de-DE', opts)}–${e.toLocaleDateString('de-DE', opts)}`;
 }
 
 export default function AccountantPage() {
@@ -161,55 +153,132 @@ export default function AccountantPage() {
     return n.toFixed(2);
   };
 
-  const handleExportCsv = () => {
+  const handleExportExcel = async () => {
     const headers = [
       'Mitarbeiter',
-      'Efektive Arbeitsstunden (h)',
+      'Effektive Arbeitsstunden (h)',
       'Nacht Anteil Info (h)',
       'Sonntag Anteil Info (h)',
       'Urlaub (Tage)',
       'Krankheit (Tage)',
       'Auswertungszeitraum',
     ];
-    const period = formatPeriodLabel(startDate, endDate);
-    const lines = [
-      headers.map(escapeCsvCell).join(';'),
-      ...hoursData.map((d) =>
-        [
-          d.employee_name,
-          formatHours(d.total_hours),
-          formatHours(d.night_hours),
-          formatHours(d.sunday_hours),
-          formatDays(d.vacation_days),
-          formatDays(d.sick_days),
-          period,
-        ]
-          .map((c) => escapeCsvCell(String(c)))
-          .join(';'),
-      ),
-    ];
-    if (hoursData.length > 0) {
-      const sumNight = hoursData.reduce((s, d) => s + d.night_hours, 0);
-      const sumSun = hoursData.reduce((s, d) => s + d.sunday_hours, 0);
-      const sumTot = hoursData.reduce((s, d) => s + d.total_hours, 0);
-      const sumVac = hoursData.reduce((s, d) => s + d.vacation_days, 0);
-      const sumSick = hoursData.reduce((s, d) => s + d.sick_days, 0);
-      lines.push(
-        [
-          t.total,
-          formatHours(sumTot),
-          formatHours(sumNight),
-          formatHours(sumSun),
-          formatDays(sumVac),
-          formatDays(sumSick),
-          period,
-        ]
-          .map((c) => escapeCsvCell(String(c)))
-          .join(';'),
-      );
+    const period = formatPeriodLabelCsv(startDate, endDate);
+    const sumNight = hoursData.reduce((s, d) => s + d.night_hours, 0);
+    const sumSun = hoursData.reduce((s, d) => s + d.sunday_hours, 0);
+    const sumTot = hoursData.reduce((s, d) => s + d.total_hours, 0);
+    const sumVac = hoursData.reduce((s, d) => s + d.vacation_days, 0);
+    const sumSick = hoursData.reduce((s, d) => s + d.sick_days, 0);
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'App Accountant Export';
+    const ws = wb.addWorksheet('Accountant');
+
+    ws.addRow(headers);
+    for (const d of hoursData) {
+      ws.addRow([
+        d.employee_name,
+        Number(formatHours(d.total_hours)),
+        Number(formatHours(d.night_hours)),
+        Number(formatHours(d.sunday_hours)),
+        Number(formatDays(d.vacation_days)),
+        Number(formatDays(d.sick_days)),
+        period,
+      ]);
     }
-    const safePeriod = period.replace(/\s/g, '_').replace(/[.]/g, '');
-    downloadCsv(`buchhaltung_${safePeriod}.csv`, lines.join('\r\n'));
+    ws.addRow([
+      'Summe',
+      Number(formatHours(sumTot)),
+      Number(formatHours(sumNight)),
+      Number(formatHours(sumSun)),
+      Number(formatDays(sumVac)),
+      Number(formatDays(sumSick)),
+      period,
+    ]);
+
+    ws.columns = [
+      { width: 24 },
+      { width: 30 },
+      { width: 24 },
+      { width: 26 },
+      { width: 16 },
+      { width: 18 },
+      { width: 24 },
+    ];
+
+    const headerRow = ws.getRow(1);
+    headerRow.height = 22;
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'left' };
+
+    const lastRowIndex = ws.lastRow?.number ?? 1;
+    const totalRow = ws.getRow(lastRowIndex);
+    totalRow.font = { bold: true };
+
+    const border: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+      left: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+      bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+      right: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+    };
+
+    // Header filter + freeze, so the table behaves like the reference.
+    ws.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: 7 },
+    };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    for (let rowIdx = 2; rowIdx <= lastRowIndex; rowIdx += 1) {
+      const row = ws.getRow(rowIdx);
+      for (let colIdx = 2; colIdx <= 6; colIdx += 1) {
+        const cell = row.getCell(colIdx);
+        cell.alignment = { horizontal: 'right' };
+        if (colIdx <= 4) {
+          cell.numFmt = '0.00';
+        } else {
+          cell.numFmt = '0.##';
+        }
+      }
+    }
+
+    for (let rowIdx = 1; rowIdx <= lastRowIndex; rowIdx += 1) {
+      for (let colIdx = 1; colIdx <= 7; colIdx += 1) {
+        const cell = ws.getRow(rowIdx).getCell(colIdx);
+        cell.border = border as ExcelJS.Borders;
+        if (rowIdx === 1) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1F4E78' },
+          };
+          continue;
+        }
+        if (rowIdx === lastRowIndex) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFB8CCE4' },
+          };
+        } else {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: rowIdx % 2 === 0 ? 'FFDCE6F1' : 'FFC5D9F1' },
+          };
+        }
+      }
+    }
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plan-export.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -258,7 +327,9 @@ export default function AccountantPage() {
               </div>
               <button
                 type="button"
-                onClick={handleExportCsv}
+                onClick={() => {
+                  void handleExportExcel();
+                }}
                 className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 print:hidden"
               >
                 {t.accountantExportCsv}
