@@ -41,6 +41,8 @@ const PlannerContext = createContext<PlannerContextValue | null>(null);
 type Props = {
   year: number;
   employeeIds: string[];
+  /** Stable id for localStorage + RPC scoping (e.g. profiles.company_id). */
+  storageTenantKey: string;
   children: ReactNode;
 };
 
@@ -102,28 +104,29 @@ function applyBemerkung(data: PlannerData, monthKey: MonthKey, empId: string, te
   return next;
 }
 
-export function PlannerStateManager({ year, employeeIds, children }: Props) {
+export function PlannerStateManager({ year, employeeIds, storageTenantKey, children }: Props) {
   const [data, setData] = useState<PlannerData>(() => {
-    const saved = typeof window !== 'undefined' ? loadPlannerFromStorage(year) : null;
+    const saved =
+      typeof window !== 'undefined' ? loadPlannerFromStorage(storageTenantKey, year) : null;
     return mergePlannerData(year, employeeIds, saved);
   });
 
   const employeeIdsKey = employeeIds.join(',');
 
   useEffect(() => {
-    const saved = loadPlannerFromStorage(year);
+    const saved = loadPlannerFromStorage(storageTenantKey, year);
     setData(mergePlannerData(year, employeeIds, saved));
-  }, [year, employeeIdsKey]);
+  }, [year, employeeIdsKey, storageTenantKey]);
 
   const syncFromPlannerRpc = useCallback(async () => {
     if (employeeIds.length === 0) return;
     try {
-      const rpc = await fetchRpcHoursForYear(year, employeeIds);
+      const rpc = await fetchRpcHoursForYear(year, employeeIds, storageTenantKey);
       setData((prev) => applyRpcYearToPlannerData(prev, rpc, employeeIds, true));
     } catch (e) {
       console.error('Montatsplaner RPC sync failed:', e);
     }
-  }, [year, employeeIds, employeeIdsKey]);
+  }, [year, employeeIds, employeeIdsKey, storageTenantKey]);
 
   useEffect(() => {
     void syncFromPlannerRpc();
@@ -156,12 +159,12 @@ export function PlannerStateManager({ year, employeeIds, children }: Props) {
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      savePlannerToStorage(data);
+      savePlannerToStorage(storageTenantKey, data);
     }, 150);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data]);
+  }, [data, storageTenantKey]);
 
   const updateMetricTotal = useCallback(
     (monthKey: MonthKey, empId: string, metric: MetricField, total: number) => {

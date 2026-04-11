@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PlannerGrid from '@/components/PlannerGrid';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store, Vacation } from '@/types/database';
 import { formatDate, formatErrorMessage, getDaysInMonth } from '@/lib/utils';
@@ -21,6 +22,7 @@ function headerStyle(color: string | null | undefined): { backgroundColor: strin
 }
 
 export default function StoreMonthlyPlannerView({ storeId }: { storeId: string }) {
+  const { companyId } = useCompany();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stores, setStores] = useState<StoreRow[]>([]);
@@ -46,13 +48,23 @@ export default function StoreMonthlyPlannerView({ storeId }: { storeId: string }
     setLoading(true);
     setError(null);
     try {
+      if (!companyId) {
+        setEmployees([]);
+        setStores([]);
+        setShifts([]);
+        setAssignments([]);
+        setUnavailableDayKeys([]);
+        setVacations([]);
+        return;
+      }
+
       const monthStart = formatDate(new Date(year, month, 1));
       const monthEnd = formatDate(new Date(year, month + 1, 0));
 
       const [employeesRes, storesRes, shiftsRes, assignmentsRes, allAssignmentsRes, vacationsRes] = await Promise.all([
-        supabase.from('employees').select('*').order('name'),
-        supabase.from('stores').select('id,name,color').order('name'),
-        supabase.from('shifts').select('*').order('start_time'),
+        supabase.from('employees').select('*').eq('company_id', companyId).order('name'),
+        supabase.from('stores').select('id,name,color').eq('company_id', companyId).order('name'),
+        supabase.from('shifts').select('*').eq('company_id', companyId).order('start_time'),
         supabase
           .from('shift_assignments')
           .select(`
@@ -63,17 +75,20 @@ export default function StoreMonthlyPlannerView({ storeId }: { storeId: string }
               color
             )
           `)
+          .eq('company_id', companyId)
           .eq('store_id', storeId)
           .gte('date', monthStart)
           .lte('date', monthEnd),
         supabase
           .from('shift_assignments')
           .select('employee_id,date,store_id,assignment_type')
+          .eq('company_id', companyId)
           .gte('date', monthStart)
           .lte('date', monthEnd),
         supabase
           .from('vacations')
           .select('*')
+          .eq('company_id', companyId)
           .lte('start_date', monthEnd)
           .gte('end_date', monthStart),
       ]);
@@ -114,7 +129,7 @@ export default function StoreMonthlyPlannerView({ storeId }: { storeId: string }
     } finally {
       setLoading(false);
     }
-  }, [storeId, year, month]);
+  }, [storeId, year, month, companyId]);
 
   useEffect(() => {
     void fetchAll();

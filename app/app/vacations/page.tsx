@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Vacation, Employee } from '@/types/database';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
@@ -90,6 +91,15 @@ function intersects(startA: Date, endA: Date, startB: Date, endB: Date): boolean
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 export default function VacationsPage() {
+  return (
+    <AuthGuard>
+      <VacationsPageInner />
+    </AuthGuard>
+  );
+}
+
+function VacationsPageInner() {
+  const { companyId } = useCompany();
   const [vacations, setVacations] = useState<(Vacation & { employee?: Employee })[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,18 +111,20 @@ export default function VacationsPage() {
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
+      if (!companyId) {
+        setVacations([]);
+        setEmployees([]);
+        return;
+      }
       const [vacationsRes, employeesRes] = await Promise.all([
         supabase
           .from('vacations')
           .select('*')
+          .eq('company_id', companyId)
           .order('start_date', { ascending: false }),
-        supabase.from('employees').select('*').order('name'),
+        supabase.from('employees').select('*').eq('company_id', companyId).order('name'),
       ]);
 
       if (vacationsRes.error) throw vacationsRes.error;
@@ -135,7 +147,11 @@ export default function VacationsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,9 +162,14 @@ export default function VacationsPage() {
     }
 
     try {
+      if (!companyId) {
+        alert(t.tenantNoCompanySave);
+        return;
+      }
       const overlapCheck = await supabase
         .from('vacations')
         .select('id, employee_id, start_date, end_date')
+        .eq('company_id', companyId)
         .lte('start_date', endDate)
         .gte('end_date', startDate);
       if (overlapCheck.error) throw overlapCheck.error;
@@ -181,6 +202,7 @@ export default function VacationsPage() {
             employee_id: employeeId,
             start_date: startDate,
             end_date: endDate,
+            company_id: companyId,
           },
         ]);
 
@@ -328,7 +350,7 @@ export default function VacationsPage() {
   }, []);
 
   return (
-    <AuthGuard>
+    <>
       <Layout>
         {loading ? (
           <div className="text-center">{t.loading}</div>
@@ -676,7 +698,7 @@ export default function VacationsPage() {
           }
         }
       `}</style>
-    </AuthGuard>
+    </>
   );
 }
 

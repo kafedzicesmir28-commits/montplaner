@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Vacation } from '@/types/database';
 import { formatErrorMessage } from '@/lib/utils';
@@ -63,7 +64,8 @@ function intersects(startA: Date, endA: Date, startB: Date, endB: Date): boolean
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
-export default function VacationSpreadsheetPage() {
+function VacationSpreadsheetInner() {
+  const { companyId } = useCompany();
   const [year, setYear] = useState(new Date().getFullYear());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [vacations, setVacations] = useState<Vacation[]>([]);
@@ -76,13 +78,19 @@ export default function VacationSpreadsheetPage() {
     setLoading(true);
     setError(null);
     try {
+      if (!companyId) {
+        setEmployees([]);
+        setVacations([]);
+        return;
+      }
       const yearStart = `${year}-01-01`;
       const yearEnd = `${year}-12-31`;
       const [empRes, vacRes] = await Promise.all([
-        supabase.from('employees').select('*').order('name', { ascending: true }),
+        supabase.from('employees').select('*').eq('company_id', companyId).order('name', { ascending: true }),
         supabase
           .from('vacations')
           .select('*')
+          .eq('company_id', companyId)
           .lte('start_date', yearEnd)
           .gte('end_date', yearStart),
       ]);
@@ -99,7 +107,7 @@ export default function VacationSpreadsheetPage() {
     } finally {
       setLoading(false);
     }
-  }, [year]);
+  }, [year, companyId]);
 
   useEffect(() => {
     void load();
@@ -135,9 +143,7 @@ export default function VacationSpreadsheetPage() {
   }, []);
 
   return (
-    <AuthGuard>
-      <Layout>
-        <div className="space-y-4">
+    <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Vacation Spreadsheet</h1>
             <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -230,7 +236,15 @@ export default function VacationSpreadsheetPage() {
               </table>
             )}
           </div>
-        </div>
+    </div>
+  );
+}
+
+export default function VacationSpreadsheetPage() {
+  return (
+    <AuthGuard>
+      <Layout>
+        <VacationSpreadsheetInner />
       </Layout>
     </AuthGuard>
   );

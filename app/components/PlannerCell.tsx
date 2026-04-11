@@ -13,6 +13,7 @@ import {
 } from '@/lib/plannerShiftQuickAssign';
 import { t } from '@/lib/translations';
 import { getStoreColor } from '@/lib/storeColors';
+import { useCompany } from '@/contexts/CompanyContext';
 
 export type PlannerAssignment = ShiftAssignment & {
   custom_start_time?: string | null;
@@ -186,6 +187,7 @@ export default function PlannerCell({
   onSaved,
   onCloseCellEdit,
 }: PlannerCellProps) {
+  const { companyId } = useCompany();
   const code = shift?.code?.trim() || shift?.name?.trim() || '';
   const storeName = store?.name?.trim() || '';
   const timeLine = workingRange(assignment, shift);
@@ -274,6 +276,10 @@ export default function PlannerCell({
     if (isVacation) return;
     if (assignmentType !== 'SHIFT') return;
     if (!shiftId || !effectiveStoreId) return;
+    if (!companyId) {
+      setSaveError(t.tenantNoCompanySave);
+      return;
+    }
     if (!availableShifts.some((s) => s.id === shiftId)) {
       setSaveError('Selected shift is not valid for this store.');
       return;
@@ -329,6 +335,7 @@ export default function PlannerCell({
             date: dateStr,
             shift_id: shiftId,
             store_id: effectiveStoreId,
+            company_id: companyId,
             custom_break_minutes: breakMinutes,
             ...customPayload,
           },
@@ -362,11 +369,16 @@ export default function PlannerCell({
     isVacation,
     assignmentType,
     onCloseCellEdit,
+    companyId,
   ]);
 
   const applyShiftQuick = useCallback(async (nextShiftId: string) => {
     const effectiveStoreId = forceStoreId ?? storeId ?? pendingStoreId ?? assignment?.store_id ?? '';
     if (!effectiveStoreId) return;
+    if (!companyId) {
+      setSaveError(t.tenantNoCompanySave);
+      return;
+    }
     const selectedShift = availableShifts.find((s) => s.id === nextShiftId);
     if (!selectedShift) return;
 
@@ -381,6 +393,7 @@ export default function PlannerCell({
         dateStr,
         shiftId: nextShiftId,
         storeId: effectiveStoreId,
+        companyId,
         assignmentId: assignment?.id,
         breakMinutes: snapToPlannerBreakMinutes(selectedShift.break_minutes ?? 0),
       });
@@ -404,6 +417,7 @@ export default function PlannerCell({
     dateStr,
     onSaved,
     onCloseCellEdit,
+    companyId,
   ]);
 
   const handleClear = async (e: React.MouseEvent) => {

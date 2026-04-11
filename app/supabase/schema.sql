@@ -133,3 +133,51 @@ CREATE POLICY "Allow all for authenticated users" ON shift_assignments
 -- Vacations policies
 CREATE POLICY "Allow all for authenticated users" ON vacations
   FOR ALL USING (auth.uid() IS NOT NULL);
+
+-- ---------------------------------------------------------------------------
+-- Multi-tenant: companies + profiles (required by the app; see migration-multi-tenant-base.sql)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.companies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text,
+  created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  company_id uuid REFERENCES public.companies (id) ON DELETE RESTRICT,
+  role text NOT NULL CHECK (role IN ('admin', 'user', 'superadmin')),
+  email text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT profiles_company_id_required_non_superadmin CHECK (role = 'superadmin' OR company_id IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS profiles_company_id_idx ON public.profiles (company_id);
+
+ALTER TABLE public.employees
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies (id) ON DELETE SET NULL;
+ALTER TABLE public.vacations
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies (id) ON DELETE SET NULL;
+ALTER TABLE public.shift_assignments
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies (id) ON DELETE SET NULL;
+ALTER TABLE public.stores
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies (id) ON DELETE SET NULL;
+ALTER TABLE public.shifts
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies (id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS employees_company_id_idx ON public.employees (company_id);
+CREATE INDEX IF NOT EXISTS vacations_company_id_idx ON public.vacations (company_id);
+CREATE INDEX IF NOT EXISTS shift_assignments_company_id_idx ON public.shift_assignments (company_id);
+CREATE INDEX IF NOT EXISTS stores_company_id_idx ON public.stores (company_id);
+CREATE INDEX IF NOT EXISTS shifts_company_id_idx ON public.shifts (company_id);
+
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all for authenticated users" ON public.companies;
+CREATE POLICY "Allow all for authenticated users" ON public.companies
+  FOR ALL USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Allow all for authenticated users" ON public.profiles;
+CREATE POLICY "Allow all for authenticated users" ON public.profiles
+  FOR ALL USING (auth.uid() IS NOT NULL);

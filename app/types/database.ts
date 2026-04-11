@@ -2,6 +2,8 @@ export interface Employee {
   id: string;
   name: string;
   created_at: string;
+  /** Tenant scope (RLS); set on writes from app. */
+  company_id?: string | null;
   employment_start_date?: string | null;
   birth_date?: string | null;
   store_id?: string | null;
@@ -15,11 +17,13 @@ export interface Store {
   id: string;
   name: string;
   color?: string | null;
+  company_id?: string | null;
 }
 
 export interface Shift {
   id: string;
   name: string;
+  company_id?: string | null;
   code?: string | null;
   start_time: string; // HH:mm format
   end_time: string; // HH:mm format
@@ -31,6 +35,7 @@ export interface Shift {
 export interface ShiftAssignment {
   id: string;
   employee_id: string;
+  company_id?: string | null;
   date: string; // YYYY-MM-DD format
   shift_id: string | null;
   store_id: string | null;
@@ -42,6 +47,7 @@ export interface ShiftAssignment {
 export interface Vacation {
   id: string;
   employee_id: string;
+  company_id?: string | null;
   start_date: string; // YYYY-MM-DD format
   end_date: string; // YYYY-MM-DD format
 }

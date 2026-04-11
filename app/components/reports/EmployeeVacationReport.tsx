@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { formatErrorMessage, parseYmdLocal } from '@/lib/utils';
 import { t } from '@/lib/translations';
@@ -52,6 +53,7 @@ function resolveEmployee(row: VacationWithEmployee): Employee | null {
 }
 
 export default function EmployeeVacationReport() {
+  const { companyId } = useCompany();
   const [filterEmployeeId, setFilterEmployeeId] = useState<string>(FILTER_ALL);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [rows, setRows] = useState<VacationWithEmployee[]>([]);
@@ -70,9 +72,14 @@ export default function EmployeeVacationReport() {
     setLoading(true);
     setError(null);
     try {
+      if (!companyId) {
+        setEmployees([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('employees')
         .select('*')
+        .eq('company_id', companyId)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
       if (error) throw error;
@@ -83,15 +90,20 @@ export default function EmployeeVacationReport() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyId]);
 
   const loadVacations = useCallback(async () => {
     setLoadingRows(true);
     setError(null);
     try {
+      if (!companyId) {
+        setRows([]);
+        return;
+      }
       let q = supabase
         .from('vacations')
         .select('*, employee:employees(*)')
+        .eq('company_id', companyId)
         .order('start_date', { ascending: false });
 
       if (filterEmployeeId !== FILTER_ALL) {
@@ -107,7 +119,7 @@ export default function EmployeeVacationReport() {
     } finally {
       setLoadingRows(false);
     }
-  }, [filterEmployeeId]);
+  }, [filterEmployeeId, companyId]);
 
   useEffect(() => {
     void loadEmployees();

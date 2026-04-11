@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { loadTenantFromSession } from '@/lib/tenantProfile';
 import { t } from '@/lib/translations';
 
 export default function LoginPage() {
@@ -25,8 +26,25 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      if (data.user) {
-        router.push('/dashboard');
+      if (data.user && data.session) {
+        const tenant = await loadTenantFromSession(data.session);
+        if (!tenant.ok) {
+          await supabase.auth.signOut();
+          if (tenant.reason === 'missing_profile') {
+            throw new Error(t.profileMissingProfile);
+          }
+          if (tenant.reason === 'missing_company') {
+            throw new Error(t.profileMissingCompany);
+          }
+          if (tenant.reason === 'profile_fetch') {
+            throw new Error(tenant.message || t.profileAccessErrorGeneric);
+          }
+          if (tenant.reason === 'invalid_role') {
+            throw new Error(t.profileInvalidRole);
+          }
+          throw new Error(t.profileAccessErrorGeneric);
+        }
+        router.push(tenant.role === 'superadmin' ? '/admin' : '/dashboard');
         router.refresh();
       }
     } catch (err: any) {

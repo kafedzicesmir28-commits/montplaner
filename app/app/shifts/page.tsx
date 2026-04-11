@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Shift, Store } from '@/types/database';
 import { t } from '@/lib/translations';
@@ -47,6 +48,15 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export default function ShiftsPage() {
+  return (
+    <AuthGuard>
+      <ShiftsPageInner />
+    </AuthGuard>
+  );
+}
+
+function ShiftsPageInner() {
+  const { companyId } = useCompany();
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,27 +70,21 @@ export default function ShiftsPage() {
   const [storeId, setStoreId] = useState('');
   const [isGlobal, setIsGlobal] = useState(false);
 
-  useEffect(() => {
-    fetchShifts();
-  }, []);
-
-  useEffect(() => {
-    const onStoresUpdated = () => {
-      void fetchShifts();
-    };
-    window.addEventListener('stores:colors-updated', onStoresUpdated as EventListener);
-    return () => window.removeEventListener('stores:colors-updated', onStoresUpdated as EventListener);
-  }, []);
-
-  const fetchShifts = async () => {
+  const fetchShifts = useCallback(async () => {
     try {
+      if (!companyId) {
+        setShifts([]);
+        setStores([]);
+        return;
+      }
       const [shiftsRes, storesRes] = await Promise.all([
         supabase
           .from('shifts')
           .select('*, store:stores(id,name,color)')
+          .eq('company_id', companyId)
           .order('is_global', { ascending: false })
           .order('start_time'),
-        supabase.from('stores').select('id,name,color').order('name'),
+        supabase.from('stores').select('id,name,color').eq('company_id', companyId).order('name'),
       ]);
 
       if (shiftsRes.error) throw shiftsRes.error;
@@ -92,7 +96,19 @@ export default function ShiftsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
+
+  useEffect(() => {
+    void fetchShifts();
+  }, [fetchShifts]);
+
+  useEffect(() => {
+    const onStoresUpdated = () => {
+      void fetchShifts();
+    };
+    window.addEventListener('stores:colors-updated', onStoresUpdated as EventListener);
+    return () => window.removeEventListener('stores:colors-updated', onStoresUpdated as EventListener);
+  }, [fetchShifts]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +120,10 @@ export default function ShiftsPage() {
     }
 
     try {
+      if (!companyId) {
+        alert(t.tenantNoCompanySave);
+        return;
+      }
       if (editingShift) {
         const { error } = await supabase
           .from('shifts')
@@ -130,6 +150,7 @@ export default function ShiftsPage() {
             break_minutes: breakMinutes,
             is_global: isGlobal,
             store_id: isGlobal ? null : (storeId || null),
+            company_id: companyId,
           }]);
 
         if (error) throw error;
@@ -198,11 +219,9 @@ export default function ShiftsPage() {
 
   if (loading) {
     return (
-      <AuthGuard>
-        <Layout>
-          <div className="text-center">{t.loading}</div>
-        </Layout>
-      </AuthGuard>
+      <Layout>
+        <div className="text-center">{t.loading}</div>
+      </Layout>
     );
   }
 
@@ -214,8 +233,7 @@ export default function ShiftsPage() {
   }, {});
 
   return (
-    <AuthGuard>
-      <Layout>
+    <Layout>
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900">{t.shiftsTitle}</h1>
@@ -499,7 +517,6 @@ export default function ShiftsPage() {
           )}
         </div>
       </Layout>
-    </AuthGuard>
   );
 }
 

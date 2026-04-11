@@ -1,14 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Employee, Store } from '@/types/database';
 import { t } from '@/lib/translations';
 
 export default function EmployeesPage() {
+  return (
+    <AuthGuard>
+      <EmployeesPageInner />
+    </AuthGuard>
+  );
+}
+
+function EmployeesPageInner() {
+  const { companyId } = useCompany();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,16 +31,16 @@ export default function EmployeesPage() {
   const [hourlyRate, setHourlyRate] = useState('');
   const [storeId, setStoreId] = useState('');
 
-  useEffect(() => {
-    fetchEmployees();
-    fetchStores();
-  }, []);
-
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
+      if (!companyId) {
+        setEmployees([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('employees')
         .select('*')
+        .eq('company_id', companyId)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -63,13 +73,18 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
+      if (!companyId) {
+        setStores([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('stores')
         .select('id,name')
+        .eq('company_id', companyId)
         .order('name', { ascending: true });
       if (error) throw error;
       setStores((data || []) as Store[]);
@@ -77,7 +92,12 @@ export default function EmployeesPage() {
       console.error('Error fetching stores:', error.message);
       setStores([]);
     }
-  };
+  }, [companyId]);
+
+  useEffect(() => {
+    void fetchEmployees();
+    void fetchStores();
+  }, [fetchEmployees, fetchStores]);
 
   const normalizeDate = (dateValue: string) => (dateValue ? dateValue : null);
 
@@ -95,11 +115,16 @@ export default function EmployeesPage() {
     store_id: storeId || null,
     is_active: isActive,
     hourly_rate: parseHourlyRate(),
+    ...(companyId ? { company_id: companyId } : {}),
     ...(typeof sortOrder === 'number' ? { sort_order: sortOrder } : {}),
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!companyId) {
+      alert(t.tenantNoCompanySave);
+      return;
+    }
     try {
       if (editingEmployee) {
         const { error } = await supabase
@@ -186,17 +211,14 @@ export default function EmployeesPage() {
 
   if (loading) {
     return (
-      <AuthGuard>
-        <Layout>
-          <div className="text-center">Loading...</div>
-        </Layout>
-      </AuthGuard>
+      <Layout>
+        <div className="text-center">Loading...</div>
+      </Layout>
     );
   }
 
   return (
-    <AuthGuard>
-      <Layout>
+    <Layout>
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900">{t.employeesTitle}</h1>
@@ -411,7 +433,6 @@ export default function EmployeesPage() {
           )}
         </div>
       </Layout>
-    </AuthGuard>
   );
 }
 

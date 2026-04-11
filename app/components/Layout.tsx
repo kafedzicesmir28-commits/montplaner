@@ -5,6 +5,9 @@ import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { t } from '@/lib/translations';
+import { useCompany } from '@/contexts/CompanyContext';
+import { adminEn } from '@/app/admin/adminEn';
+import { clearPlannerBrowserCache } from '@/lib/plannerBrowserCache';
 
 export default function Layout({
   children,
@@ -15,11 +18,15 @@ export default function Layout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { role } = useCompany();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      clearPlannerBrowserCache();
+      window.location.replace('/login');
+    }
   };
 
   const navItems = [
@@ -58,6 +65,35 @@ export default function Layout({
     pathname === '/planner' || (pathname?.startsWith('/planner/') ?? false);
 
   const isMontatsplanerRoute = pathname === '/montatsplaner';
+
+  if (role === 'superadmin') {
+    return (
+      <div className="min-h-screen bg-[#f8f9fb] text-gray-900 print:bg-white" lang="en">
+        <nav className="print:hidden sticky top-0 z-[10] border-b border-gray-200 bg-white/95 backdrop-blur-sm">
+          <div className="mx-auto max-w-7xl px-3 sm:px-5 lg:px-8">
+            <div className="flex h-12 items-center justify-between gap-3">
+              <Link
+                href="/admin"
+                className="rounded-md px-2.5 py-1.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100 hover:text-blue-800"
+              >
+                {adminEn.title}
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
+              >
+                {adminEn.logOut}
+              </button>
+            </div>
+          </div>
+        </nav>
+        <main className="mx-auto w-full max-w-full min-w-0 max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8 print:max-w-none print:px-2 print:py-4">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9fb] text-gray-900 print:bg-white">

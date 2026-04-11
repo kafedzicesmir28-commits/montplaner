@@ -37,7 +37,15 @@ export default function SetupCheckPage() {
     }
 
     // Check each table
-    const requiredTables = ['employees', 'stores', 'shifts', 'shift_assignments', 'vacations'];
+    const requiredTables = [
+      'companies',
+      'profiles',
+      'employees',
+      'stores',
+      'shifts',
+      'shift_assignments',
+      'vacations',
+    ];
     const tableChecks: TableStatus[] = [];
 
     for (const tableName of requiredTables) {
@@ -183,6 +191,15 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key`}
                 </ol>
                 <p className="text-yellow-700 mt-2 text-sm">
                   After running the SQL, refresh this page to verify the tables were created.
+                </p>
+                <p className="text-yellow-800 mt-4 text-sm">
+                  If you already ran an older <code className="bg-yellow-100 px-1 rounded">schema.sql</code> and only
+                  see errors like <strong>PGRST205</strong> for <code className="bg-yellow-100 px-1 rounded">profiles</code>, run{' '}
+                  <code className="bg-yellow-100 px-1 rounded">app/supabase/migration-multi-tenant-base.sql</code> in the
+                  SQL Editor (adds <code className="bg-yellow-100 px-1 rounded">companies</code>,{' '}
+                  <code className="bg-yellow-100 px-1 rounded">profiles</code>, and <code className="bg-yellow-100 px-1 rounded">company_id</code>{' '}
+                  columns). Then run <code className="bg-yellow-100 px-1 rounded">migration-multi-tenant-default-company.sql</code>{' '}
+                  if you need a default company and admin profile.
                 </p>
               </div>
             )}

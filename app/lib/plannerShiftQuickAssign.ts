@@ -1,6 +1,7 @@
 import type { Shift } from '@/types/database';
 import { supabase } from '@/lib/supabaseClient';
 import { formatErrorMessage } from '@/lib/utils';
+import { t } from '@/lib/translations';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
 
 export const PLANNER_BREAK_OPTIONS = [0, 30, 45, 60] as const;
@@ -34,6 +35,7 @@ export type QuickPlannerShiftUpsertParams = {
   dateStr: string;
   shiftId: string;
   storeId: string;
+  companyId: string | null;
   assignmentId?: string | null;
   breakMinutes: number;
 };
@@ -44,11 +46,16 @@ export type QuickPlannerShiftUpsertParams = {
 export async function upsertQuickPlannerShift(
   params: QuickPlannerShiftUpsertParams
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!params.companyId) {
+    return { ok: false, message: t.tenantNoCompanySave };
+  }
+
   const payload = {
     employee_id: params.employeeId,
     date: params.dateStr,
     shift_id: params.shiftId,
     store_id: params.storeId,
+    company_id: params.companyId,
     assignment_type: 'SHIFT' as const,
     custom_start_time: null as string | null,
     custom_end_time: null as string | null,

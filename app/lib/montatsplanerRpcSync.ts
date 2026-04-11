@@ -97,7 +97,8 @@ export function applyRpcTotalsToMonthPayload(
 /** Loads computed hours for every employee and calendar month from planner data (single source of truth). */
 export async function fetchRpcHoursForYear(
   year: number,
-  employeeIds: string[]
+  employeeIds: string[],
+  companyId: string | null
 ): Promise<Record<MonthKey, Record<string, RpcHoursRow | null>>> {
   if (employeeIds.length === 0) {
     const empty = {} as Record<MonthKey, Record<string, RpcHoursRow | null>>;
@@ -111,7 +112,7 @@ export async function fetchRpcHoursForYear(
   let assignments: PlannerShiftAssignmentRow[] = [];
   let vacations: Vacation[] = [];
   for (let attempt = 0; attempt < RPC_SYNC_MAX_ATTEMPTS; attempt++) {
-    const assignQ = supabase
+    let assignQ = supabase
       .from('shift_assignments')
       .select(
         `employee_id, date, assignment_type, custom_start_time, custom_end_time, custom_break_minutes, shift_id, store_id, shift:shifts(${SHIFT_EMBED})`
@@ -119,13 +120,15 @@ export async function fetchRpcHoursForYear(
       .gte('date', start)
       .lte('date', end)
       .in('employee_id', employeeIds);
+    if (companyId) assignQ = assignQ.eq('company_id', companyId);
 
-    const vacQ = supabase
+    let vacQ = supabase
       .from('vacations')
       .select('*')
       .lte('start_date', end)
       .gte('end_date', start)
       .in('employee_id', employeeIds);
+    if (companyId) vacQ = vacQ.eq('company_id', companyId);
 
     const [assignRes, vacRes] = await Promise.all([assignQ, vacQ]);
 

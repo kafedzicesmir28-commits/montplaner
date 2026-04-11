@@ -181,16 +181,17 @@ export function createEmptyPlannerData(year: number, employeeIds: string[]): Pla
   return { year, months };
 }
 
-const STORAGE_PREFIX = 'montatsplaner_planner_v1_';
+/** v2 keys include tenant id so switching company/user never merges another tenant's draft. */
+const STORAGE_PREFIX = 'montatsplaner_planner_v2_';
 
-export function storageKeyForYear(year: number): string {
-  return `${STORAGE_PREFIX}${year}`;
+export function storageKeyForTenantYear(tenantKey: string, year: number): string {
+  return `${STORAGE_PREFIX}${tenantKey}_${year}`;
 }
 
-export function loadPlannerFromStorage(year: number): PlannerData | null {
+export function loadPlannerFromStorage(tenantKey: string, year: number): PlannerData | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(storageKeyForYear(year));
+    const raw = localStorage.getItem(storageKeyForTenantYear(tenantKey, year));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PlannerData;
     if (!parsed || typeof parsed.year !== 'number' || !parsed.months) return null;
@@ -200,10 +201,10 @@ export function loadPlannerFromStorage(year: number): PlannerData | null {
   }
 }
 
-export function savePlannerToStorage(data: PlannerData): void {
+export function savePlannerToStorage(tenantKey: string, data: PlannerData): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(storageKeyForYear(data.year), JSON.stringify(data));
+    localStorage.setItem(storageKeyForTenantYear(tenantKey, data.year), JSON.stringify(data));
   } catch {
     // ignore quota
   }

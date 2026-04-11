@@ -29,6 +29,16 @@ export const t = {
   update: 'Aktualisieren',
   create: 'Erstellen',
   loading: 'Wird geladen...',
+  redirectingToLogin: 'Weiterleitung zur Anmeldung...',
+  profileMissingProfile:
+    'Es wurde kein Benutzerprofil gefunden. Bitte wenden Sie sich an den Administrator.',
+  profileMissingCompany:
+    'Ihrem Konto ist keine Firma zugeordnet. Bitte wenden Sie sich an den Administrator oder führen Sie die Datenbankmigration aus.',
+  profileAccessErrorGeneric: 'Firmenprofil konnte nicht geladen werden.',
+  profileInvalidRole: 'Ungültige Rolle im Profil.',
+  profileSignOutAndRetry: 'Abmelden und erneut versuchen',
+  tenantNoCompanySave:
+    'Ohne zugewiesene Firma koennen Sie hier keine Daten speichern. Nutzen Sie /admin oder bitten Sie einen Administrator um eine Firmenzordnung.',
 
   // Employees
   employeesTitle: 'Mitarbeiter',

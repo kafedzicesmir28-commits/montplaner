@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
+import { useCompany } from '@/contexts/CompanyContext';
 import Link from 'next/link';
 import { CalendarDays, ChartColumn, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
@@ -13,6 +14,15 @@ import { parseStoreHexColor, resolveStoreColor } from '@/lib/storeColors';
 type StoreRow = Store & { color?: string | null };
 
 export default function StoresPage() {
+  return (
+    <AuthGuard>
+      <StoresPageInner />
+    </AuthGuard>
+  );
+}
+
+function StoresPageInner() {
+  const { companyId } = useCompany();
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -29,15 +39,16 @@ export default function StoresPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchStores();
-  }, []);
-
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
+      if (!companyId) {
+        setStores([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('stores')
         .select('*')
+        .eq('company_id', companyId)
         .order('name');
 
       if (error) throw error;
@@ -47,7 +58,11 @@ export default function StoresPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
+
+  useEffect(() => {
+    void fetchStores();
+  }, [fetchStores]);
 
   const cards = useMemo(
     () =>
@@ -68,7 +83,12 @@ export default function StoresPage() {
     setSaveError(null);
     try {
       const color = parseStoreHexColor(newColor) ?? '#E5E7EB';
-      const payload = { name: newName.trim(), color };
+      if (!companyId) {
+        setSaveError(t.tenantNoCompanySave);
+        setSaving(false);
+        return;
+      }
+      const payload = { name: newName.trim(), color, company_id: companyId };
       const { error } = await supabase.from('stores').insert([payload]);
       if (error) throw error;
       setShowCreate(false);
@@ -130,17 +150,14 @@ export default function StoresPage() {
 
   if (loading) {
     return (
-      <AuthGuard>
-        <Layout>
-          <div className="text-center">{t.loading}</div>
-        </Layout>
-      </AuthGuard>
+      <Layout>
+        <div className="text-center">{t.loading}</div>
+      </Layout>
     );
   }
 
   return (
-    <AuthGuard>
-      <Layout>
+    <Layout>
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-gray-900">{t.storesTitle}</h1>
@@ -337,7 +354,6 @@ export default function StoresPage() {
           ) : null}
         </div>
       </Layout>
-    </AuthGuard>
   );
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store, Vacation } from '@/types/database';
 import {
@@ -47,8 +48,9 @@ function formatClock(value: string): string {
   return `${part[0]!.padStart(2, '0')}:${part[1]!.padStart(2, '0')}`;
 }
 
-export default function EmployeeMonthlyReportPage() {
+function EmployeeMonthlyReportInner() {
   const params = useParams();
+  const { companyId } = useCompany();
   const employeeId = typeof params.employeeId === 'string' ? params.employeeId : '';
 
   const [monthValue, setMonthValue] = useState(() => {
@@ -86,11 +88,19 @@ export default function EmployeeMonthlyReportPage() {
     setLoading(true);
     setError(null);
     try {
+      if (!companyId) {
+        setEmployee(null);
+        setAssignments([]);
+        setVacations([]);
+        setMonthTotals(null);
+        return;
+      }
       const [empRes, assignRes, vacRes] = await Promise.all([
-        supabase.from('employees').select('*').eq('id', employeeId).maybeSingle(),
+        supabase.from('employees').select('*').eq('id', employeeId).eq('company_id', companyId).maybeSingle(),
         supabase
           .from('shift_assignments')
           .select('*, shift:shifts(*), store:stores(*)')
+          .eq('company_id', companyId)
           .eq('employee_id', employeeId)
           .gte('date', monthStart)
           .lte('date', monthEnd)
@@ -98,6 +108,7 @@ export default function EmployeeMonthlyReportPage() {
         supabase
           .from('vacations')
           .select('*')
+          .eq('company_id', companyId)
           .eq('employee_id', employeeId)
           .lte('start_date', monthEnd)
           .gte('end_date', monthStart),
@@ -121,7 +132,7 @@ export default function EmployeeMonthlyReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [employeeId, monthStart, monthEnd]);
+  }, [employeeId, monthStart, monthEnd, companyId]);
 
   useEffect(() => {
     void load();
@@ -171,19 +182,11 @@ export default function EmployeeMonthlyReportPage() {
   }, [calendarDays, vacationOnDate, assignmentByDate]);
 
   if (!employeeId) {
-    return (
-      <AuthGuard>
-        <Layout>
-          <p className="text-sm text-red-600">Invalid employee.</p>
-        </Layout>
-      </AuthGuard>
-    );
+    return <p className="text-sm text-red-600">Invalid employee.</p>;
   }
 
   return (
-    <AuthGuard>
-      <Layout>
-        <div className="space-y-6">
+    <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
@@ -385,7 +388,15 @@ export default function EmployeeMonthlyReportPage() {
               </table>
             </div>
           )}
-        </div>
+    </div>
+  );
+}
+
+export default function EmployeeMonthlyReportPage() {
+  return (
+    <AuthGuard>
+      <Layout>
+        <EmployeeMonthlyReportInner />
       </Layout>
     </AuthGuard>
   );

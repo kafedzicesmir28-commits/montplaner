@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Printer } from 'lucide-react';
+import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { calculateEmployeeHours } from '@/lib/hoursCalculator';
 import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
@@ -41,6 +42,7 @@ function yearOptions(): number[] {
 const MONTH_INDEXES = Array.from({ length: 12 }, (_, i) => i);
 
 export default function EmployeeMonthlyReport() {
+  const { companyId } = useCompany();
   const now = new Date();
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth());
@@ -69,9 +71,14 @@ export default function EmployeeMonthlyReport() {
     setLoadingEmployees(true);
     setError(null);
     try {
+      if (!companyId) {
+        setEmployees([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('employees')
         .select('*')
+        .eq('company_id', companyId)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
       if (error) throw error;
@@ -86,7 +93,7 @@ export default function EmployeeMonthlyReport() {
     } finally {
       setLoadingEmployees(false);
     }
-  }, []);
+  }, [companyId]);
 
   const loadAssignments = useCallback(async () => {
     if (!selectedEmployeeId) {
@@ -98,9 +105,14 @@ export default function EmployeeMonthlyReport() {
     setError(null);
 
     try {
+      if (!companyId) {
+        setRows([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('shift_assignments')
         .select('*, shift:shifts(*), store:stores(*)')
+        .eq('company_id', companyId)
         .eq('employee_id', selectedEmployeeId)
         .gte('date', fromDate)
         .lte('date', toDate)
@@ -141,7 +153,7 @@ export default function EmployeeMonthlyReport() {
     } finally {
       setLoadingRows(false);
     }
-  }, [selectedEmployeeId, fromDate, toDate]);
+  }, [selectedEmployeeId, fromDate, toDate, companyId]);
 
   useEffect(() => {
     void loadEmployees();
