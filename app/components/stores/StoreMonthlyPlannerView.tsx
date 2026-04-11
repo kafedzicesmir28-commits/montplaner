@@ -146,7 +146,7 @@ export default function StoreMonthlyPlannerView({ storeId }: { storeId: string }
             {t.previous}
           </button>
           <h2 className="text-xl font-semibold text-gray-900">
-            {currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+            {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </h2>
           <button
             type="button"

@@ -362,11 +362,10 @@ export default function PlannerGrid({
                       <th
                         key={day.toISOString()}
                         scope="col"
-                        className={`sticky top-[28px] z-20 border border-gray-200 px-0.5 py-1.5 text-center text-[13px] font-bold uppercase text-gray-700 ${
+                        className={`sticky top-[28px] z-20 border border-gray-200 px-0.5 py-1.5 text-center text-[11px] font-bold uppercase text-gray-700 ${
                           segIdx % 2 === 0 ? 'bg-[#f8fafc]' : 'bg-[#f3f6fb]'
                         }`}
                         style={{
-                          minWidth: 124,
                           borderRight:
                             !printWeeklyTotals &&
                             segIdx < weekSegments.length - 1 &&
@@ -375,7 +374,9 @@ export default function PlannerGrid({
                               : undefined,
                         }}
                       >
-                        <div>{day.getDate()}</div>
+                        <div className="planner-header-daynum text-[15px] font-bold tabular-nums leading-tight text-gray-800">
+                          {day.getDate()}
+                        </div>
                         <div className="font-semibold text-gray-500">
                           {day.toLocaleDateString('de-DE', { weekday: 'short' })}
                         </div>
@@ -429,7 +430,7 @@ export default function PlannerGrid({
                           (e.currentTarget as HTMLInputElement).blur();
                         }
                       }}
-                      className="w-full rounded border border-gray-300 bg-white px-1 py-0.5 text-center text-[13px] font-semibold text-gray-800"
+                      className="planner-pos-input-num w-full rounded border border-gray-300 bg-white px-1 py-0.5 text-center text-sm font-semibold tabular-nums text-gray-800"
                     />
                   </th>
                   <th
@@ -532,7 +533,7 @@ export default function PlannerGrid({
                       chunk.push(
                         <td
                           key={`${employee.id}-wsum-${seg.weekYear}-${seg.weekNumber}-${si}`}
-                          className="border border-gray-200 bg-gray-100 px-2 py-1 text-right text-[13px] font-semibold tabular-nums text-gray-800"
+                          className="border border-gray-200 bg-gray-100 px-2 py-1 text-right text-[11px] font-semibold tabular-nums text-gray-800"
                           style={{ borderRight: '4px solid #FFD700', backgroundColor: rowBgColor }}
                         >
                           {formatWorkHoursDisplay(weekTotal)}
@@ -543,7 +544,7 @@ export default function PlannerGrid({
                       chunk.push(
                         <td
                           key={`${employee.id}-msum`}
-                          className="border border-gray-200 bg-blue-50 px-2 py-1 text-right text-[13px] font-bold tabular-nums text-blue-900"
+                          className="border border-gray-200 bg-blue-50 px-2 py-1 text-right text-[11px] font-bold tabular-nums text-blue-900"
                           style={{ backgroundColor: rowBgColor }}
                         >
                           {formatWorkHoursDisplay(employeeMonthTotal)}
@@ -574,7 +575,6 @@ export default function PlannerGrid({
           shifts={shifts}
           onClose={() => setClickAssignTarget(null)}
           onSaved={onAssignmentsUpdated}
-          onPickStatus={onStatusDrop}
         />
       ) : null}
     </div>

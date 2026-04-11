@@ -98,11 +98,8 @@ export const t = {
   plannerClickAssignChooseStore: 'Filiale wählen',
   plannerClickAssignChooseShift: 'Schicht wählen',
   plannerNoShiftsForStore: 'Keine Schichten für diese Filiale.',
-  /** Click-assign modal: Frei / KR / FE without picking a shift */
-  plannerClickAssignDayStatus: 'Statt Schicht: Frei, krank oder Ferien',
-  plannerStatusLabelFrei: 'Frei',
-  plannerStatusLabelKrank: 'KR',
-  plannerStatusLabelFerie: 'FE',
+  /** Click-to-assign modal: assign absence / day-off without store+shift */
+  plannerClickAssignGlobalStatus: 'Globaler Status',
 
   // Vacations
   vacationsTitle: 'Urlaub (Ferie)',

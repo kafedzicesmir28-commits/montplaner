@@ -11,7 +11,6 @@ import {
   snapToPlannerBreakMinutes,
   upsertQuickPlannerShift,
 } from '@/lib/plannerShiftQuickAssign';
-import { shiftPlannerAbbrev } from '@/lib/plannerShiftAbbrev';
 import { t } from '@/lib/translations';
 import { getStoreColor } from '@/lib/storeColors';
 
@@ -129,9 +128,6 @@ const TIME_OPTIONS = Array.from({ length: 144 }, (_, i) => {
   return `${h}:${m}`;
 });
 
-/** Same min height for shift, Frei/KR/Ferie, vacation, unavailable, and store preview cells */
-const PLANNER_DAY_CARD_MIN = 'min-h-[68px]';
-
 export type PlannerCellProps = {
   employeeId: string;
   dateStr: string;
@@ -190,8 +186,7 @@ export default function PlannerCell({
   onSaved,
   onCloseCellEdit,
 }: PlannerCellProps) {
-  const codeRaw = shift?.code?.trim() || shift?.name?.trim() || '';
-  const codeDisplay = shiftPlannerAbbrev(codeRaw);
+  const code = shift?.code?.trim() || shift?.name?.trim() || '';
   const storeName = store?.name?.trim() || '';
   const timeLine = workingRange(assignment, shift);
   const displayBreakMinutes = effectiveBreakMinutes(assignment, shift);
@@ -585,9 +580,9 @@ export default function PlannerCell({
         borderRight: weekDividerRight
           ? '4px solid #FFD700'
           : `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
-        minWidth: editorMinWidth ?? 124,
-        maxWidth: isEditing ? 236 : 176,
-        minHeight: 84,
+        minWidth: editorMinWidth ?? 96,
+        maxWidth: isEditing ? 200 : 122,
+        minHeight: 72,
         height: 'auto',
         verticalAlign: 'middle',
         position: 'relative',
@@ -602,7 +597,7 @@ export default function PlannerCell({
       {isEditing && assignment && isAssignmentStatusOnly && !isVacation ? (
         <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
           <div
-            className={`planner-day-card mb-1 flex ${PLANNER_DAY_CARD_MIN} items-center justify-center rounded-md px-1 py-2 text-center text-[13px] font-semibold leading-tight`}
+            className="mb-1 flex min-h-[44px] items-center justify-center rounded-md px-1 py-2 text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             {assignmentType === 'FERIEN' ? 'Ferie' : assignmentType === 'KRANK' ? 'KR' : 'Frei'}
@@ -622,7 +617,7 @@ export default function PlannerCell({
           className={`p-1 ${assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? 'group relative' : ''}`}
         >
           <div
-            className={`planner-day-card flex ${PLANNER_DAY_CARD_MIN} items-center justify-center rounded-md px-0.5 py-1 text-center text-[13px] font-semibold leading-tight`}
+            className="flex h-[58px] items-center justify-center rounded-md text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             {assignmentType === 'FERIEN' ? 'Ferie' : vacationText}
@@ -645,7 +640,7 @@ export default function PlannerCell({
           className={`p-1 ${assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? 'group relative' : ''}`}
         >
           <div
-            className={`planner-day-card flex ${PLANNER_DAY_CARD_MIN} items-center justify-center rounded-md px-0.5 py-1 text-center text-[13px] font-semibold leading-tight`}
+            className="flex h-[58px] items-center justify-center rounded-md text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             KR
@@ -668,7 +663,7 @@ export default function PlannerCell({
           className={`p-1 ${assignment?.id && isAssignmentStatusOnly && !readOnly && !isUnavailable ? 'group relative' : ''}`}
         >
           <div
-            className={`planner-day-card flex ${PLANNER_DAY_CARD_MIN} items-center justify-center rounded-md px-0.5 py-1 text-center text-[13px] font-semibold leading-tight`}
+            className="flex h-[58px] items-center justify-center rounded-md text-center text-[11px] font-semibold leading-tight"
             style={cardStyle}
           >
             Frei
@@ -701,47 +696,33 @@ export default function PlannerCell({
                   {t.plannerNoShiftsForStore}
                 </div>
               ) : (
-                availableShifts.map((s, idx) => {
-                  const quickLabel = s.code?.trim() || s.name?.trim() || '';
-                  const quickAbbrev = shiftPlannerAbbrev(quickLabel);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        void applyShiftQuick(s.id);
-                      }}
-                      disabled={saving}
-                      autoFocus={idx === 0}
-                      className="w-full rounded-md px-2.5 py-2 text-left text-xs font-medium transition-all hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-                      style={{
-                        backgroundColor:
-                          shiftId === s.id ? selectedStoreColor : withAlpha(selectedStoreColor, 0.2),
-                        border: `1px solid ${selectedStoreColor}`,
-                        color: shiftId === s.id ? foregroundForPicker(selectedStoreColor) : '#000000',
-                        transform: shiftId === s.id ? 'scale(1.02)' : undefined,
-                      }}
-                    >
-                      <div className="flex w-full min-w-0 flex-row flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-0.5 text-center">
-                        <span
-                          className="shrink-0 text-center text-[13px] font-semibold tabular-nums leading-none"
-                          title={quickLabel || undefined}
-                        >
-                          {quickAbbrev || '—'}
-                        </span>
-                        <span
-                          className="shrink-0 text-center text-[13px] font-semibold tabular-nums leading-none sm:text-sm"
-                          title={`${formatClock(s.start_time)} – ${formatClock(s.end_time)}`}
-                        >
-                          {formatClock(s.start_time)} – {formatClock(s.end_time)}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-center text-[10px] font-medium sm:text-[11px]">
-                        Break: {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}m
-                      </div>
-                    </button>
-                  );
-                })
+                availableShifts.map((s, idx) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      void applyShiftQuick(s.id);
+                    }}
+                    disabled={saving}
+                    autoFocus={idx === 0}
+                    className="w-full rounded-md px-2.5 py-2 text-left text-[10px] font-medium transition-all hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      backgroundColor:
+                        shiftId === s.id ? selectedStoreColor : withAlpha(selectedStoreColor, 0.2),
+                      border: `1px solid ${selectedStoreColor}`,
+                      color: shiftId === s.id ? foregroundForPicker(selectedStoreColor) : '#000000',
+                      transform: shiftId === s.id ? 'scale(1.02)' : undefined,
+                    }}
+                  >
+                    <div className="truncate text-[11px] font-semibold">{s.name}</div>
+                    <div className="planner-cell-hours text-xs font-medium tabular-nums leading-snug">
+                      {formatClock(s.start_time)} – {formatClock(s.end_time)}
+                    </div>
+                    <div className="planner-cell-numeric text-xs font-medium tabular-nums leading-snug">
+                      Break: {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}m
+                    </div>
+                  </button>
+                ))
               )}
             </div>
           ) : (
@@ -801,7 +782,7 @@ export default function PlannerCell({
                 ref={startTimeSelectRef}
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                className="planner-cell-hours mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[11px] text-gray-900 tabular-nums"
               >
                 {TIME_OPTIONS.map((time) => (
                   <option key={`start-${time}`} value={time}>
@@ -816,7 +797,7 @@ export default function PlannerCell({
                 ref={endTimeSelectRef}
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                className="planner-cell-hours mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[11px] text-gray-900 tabular-nums"
               >
                 {TIME_OPTIONS.map((time) => (
                   <option key={`end-${time}`} value={time}>
@@ -829,7 +810,7 @@ export default function PlannerCell({
                 <select
                   value={String(breakMinutes)}
                   onChange={(e) => setBreakMinutes(snapToPlannerBreakMinutes(Number(e.target.value)))}
-                  className="w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                  className="planner-cell-numeric w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[11px] text-gray-900 tabular-nums"
                   title={t.breakMinutes}
                 >
                   {PLANNER_BREAK_OPTIONS.map((n) => (
@@ -870,29 +851,23 @@ export default function PlannerCell({
           className={`p-1 ${assignment?.id && !readOnly && !isUnavailable ? 'group relative' : ''}`}
         >
           <div
-            className={`planner-shift-card planner-day-card flex ${PLANNER_DAY_CARD_MIN} flex-col items-center justify-center gap-0.5 rounded-md px-2 py-2 text-center text-xs font-medium leading-tight`}
+            className="flex min-h-[56px] flex-col items-center justify-center gap-0 rounded-md px-1 py-0.5 text-center text-[10px] font-medium leading-tight"
             style={cardStyle}
           >
-            <div className="planner-shift-card-row flex w-full min-w-0 flex-row flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-0.5">
-              <div
-                className="planner-shift-card-code shrink-0 text-center text-[13px] font-semibold tabular-nums lining-nums leading-none tracking-tight"
-                title={codeRaw || undefined}
-              >
-                {codeDisplay || '—'}
-              </div>
-              <div
-                className="planner-shift-card-time shrink-0 text-center text-[13px] font-semibold tabular-nums lining-nums leading-tight sm:text-sm"
-                title={timeLine ?? undefined}
-              >
-                {timeLine ? (
-                  <span className="whitespace-nowrap">{timeLine}</span>
-                ) : (
-                  '—'
-                )}
-              </div>
+            <div className="max-w-full truncate font-semibold tracking-tight" title={code}>
+              {code || '—'}
+            </div>
+            <div
+              className="planner-cell-hours mt-0.5 min-w-0 max-w-full truncate text-[15px] font-medium tabular-nums leading-tight"
+              title={timeLine || undefined}
+            >
+              {timeLine || '—'}
             </div>
             {displayBreakMinutes > 0 ? (
-              <div className="planner-shift-card-pause w-full min-w-0 text-center text-[11px] font-medium tabular-nums lining-nums opacity-80 sm:text-xs">
+              <div
+                className="planner-cell-numeric mt-0.5 min-w-0 max-w-full truncate text-sm tabular-nums leading-tight opacity-70"
+                title={`${t.plannerPauseAbbrev} ${displayBreakMinutes}`}
+              >
                 {t.plannerPauseAbbrev} {displayBreakMinutes}
               </div>
             ) : null}
@@ -913,29 +888,31 @@ export default function PlannerCell({
       ) : isUnavailable ? (
         <div className="p-1">
           <div
-            className={`planner-day-card flex ${PLANNER_DAY_CARD_MIN} flex-col items-center justify-center rounded-md px-1 py-1 text-center text-[13px] font-semibold leading-snug`}
+            className="flex h-[58px] flex-col items-center justify-center rounded-md px-1 text-center text-[11px] font-semibold leading-snug"
             style={{ backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db' }}
             title="Already assigned to another store or status"
           >
             <div>Unavailable</div>
-            <div className="mt-0.5 text-xs font-medium">Already assigned</div>
+            <div className="mt-0.5 text-[10px] font-medium">Already assigned</div>
           </div>
         </div>
       ) : selectedStoreId && !hideUnassignedStorePreview ? (
         <div className="p-1">
           <div
-            className={`planner-day-card flex ${PLANNER_DAY_CARD_MIN} flex-col items-center justify-center rounded-md px-1 py-1 text-center text-[13px] font-medium leading-snug`}
+            className="flex h-[58px] flex-col items-center justify-center rounded-md px-1 text-center text-[11px] font-medium leading-snug"
             style={cardStyle}
           >
             <div className="max-w-full truncate font-medium" title={resolvedStoreName}>
               {resolvedStoreName || '—'}
             </div>
-            <div className="max-w-full truncate text-sm font-semibold tracking-tight">Select shift</div>
-            <div className="mt-0.5 whitespace-nowrap font-medium tabular-nums">—</div>
+            <div className="max-w-full truncate font-semibold tracking-tight">Select shift</div>
+            <div className="planner-cell-hours mt-0.5 min-w-0 max-w-full truncate text-[15px] font-medium tabular-nums leading-tight">
+              —
+            </div>
           </div>
         </div>
       ) : (
-        <div className="flex h-full items-center justify-center px-1 py-2 text-center text-xs font-normal opacity-70">—</div>
+        <div className="flex h-full items-center justify-center px-1 py-2 text-center text-[10px] font-normal opacity-70">—</div>
       )}
     </td>
   );

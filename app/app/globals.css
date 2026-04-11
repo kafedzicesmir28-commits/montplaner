@@ -89,6 +89,14 @@ td {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
 }
 
+/* Planner (/planner): tabular alignment for hour/total/break numbers (sizes set in components). */
+.planner-cell-hours,
+.planner-cell-numeric,
+.planner-header-daynum,
+.planner-pos-input-num {
+  font-variant-numeric: tabular-nums;
+}
+
 @media print {
   body {
     background: #fff !important;
@@ -122,6 +130,19 @@ td {
   .planner-print-area {
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+
+  /* Planner numerics in print — large for readability (overrides small table font-size). */
+  .planner-cell-hours {
+    font-size: clamp(17px, 3.35mm, 26px) !important;
+    line-height: 1.12 !important;
+  }
+
+  .planner-cell-numeric,
+  .planner-header-daynum,
+  .planner-pos-input-num {
+    font-size: clamp(16px, 3.05mm, 23px) !important;
+    line-height: 1.12 !important;
   }
 
   @page {
