@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import ExcelJS from 'exceljs';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import {
   getAllEmployeesHoursInPeriod,
@@ -38,17 +37,6 @@ function formatPeriodLabelCsv(startYmd: string, endYmd: string): string {
 }
 
 export default function AccountantPage() {
-  return (
-    <AuthGuard>
-      <Layout>
-        <AccountantPageInner />
-      </Layout>
-    </AuthGuard>
-  );
-}
-
-function AccountantPageInner() {
-  const { companyId } = useCompany();
   const [hoursData, setHoursData] = useState<HoursCalculation[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(() => {
@@ -76,23 +64,17 @@ function AccountantPageInner() {
         setHoursData([]);
         return;
       }
-      if (!companyId) {
-        setHoursData([]);
-        return;
-      }
 
       const [employeesRes, assignRes, vacRes] = await Promise.all([
-        supabase.from('employees').select('*').eq('company_id', companyId).order('name'),
+        supabase.from('employees').select('*').order('name'),
         supabase
           .from('shift_assignments')
           .select('employee_id, date, assignment_type, custom_start_time, custom_end_time, custom_break_minutes, shift_id, store_id, shift:shifts(*)')
-          .eq('company_id', companyId)
           .gte('date', startDate)
           .lte('date', endDate),
         supabase
           .from('vacations')
           .select('*')
-          .eq('company_id', companyId)
           .lte('start_date', endDate)
           .gte('end_date', startDate),
       ]);
@@ -149,7 +131,7 @@ function AccountantPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, rangeInvalid, companyId]);
+  }, [startDate, endDate, rangeInvalid]);
 
   useEffect(() => {
     void calculateHoursSummary();
@@ -300,11 +282,19 @@ function AccountantPageInner() {
   };
 
   if (loading) {
-    return <div className="text-center">{t.loading}</div>;
+    return (
+      <AuthGuard>
+        <Layout>
+          <div className="text-center">{t.loading}</div>
+        </Layout>
+      </AuthGuard>
+    );
   }
 
   return (
-    <div className="space-y-6 print:space-y-4">
+    <AuthGuard>
+      <Layout>
+        <div className="space-y-6 print:space-y-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between print:break-inside-avoid">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{t.accountantViewTitle}</h1>
@@ -433,6 +423,8 @@ function AccountantPageInner() {
               )}
             </table>
           </div>
-    </div>
+        </div>
+      </Layout>
+    </AuthGuard>
   );
 }

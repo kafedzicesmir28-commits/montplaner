@@ -9,7 +9,6 @@ import {
   upsertQuickPlannerShift,
 } from '@/lib/plannerShiftQuickAssign';
 import { t } from '@/lib/translations';
-import { useCompany } from '@/contexts/CompanyContext';
 
 type StoreRow = Pick<Store, 'id' | 'name'> & { color?: string | null };
 
@@ -69,7 +68,6 @@ export function PlannerClickAssignModal({
   onClose,
   onSaved,
 }: PlannerClickAssignModalProps) {
-  const { companyId } = useCompany();
   const [step, setStep] = useState<1 | 2>(1);
   const [storeId, setStoreId] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -104,7 +102,6 @@ export function PlannerClickAssignModal({
         dateStr,
         shiftId: shift.id,
         storeId,
-        companyId,
         assignmentId,
         breakMinutes: snapToPlannerBreakMinutes(shift.break_minutes ?? 0),
       });
@@ -116,7 +113,7 @@ export function PlannerClickAssignModal({
       await onSaved();
       resetAndClose();
     },
-    [assignmentId, availableShifts, companyId, dateStr, employeeId, onSaved, resetAndClose, storeId]
+    [assignmentId, availableShifts, dateStr, employeeId, onSaved, resetAndClose, storeId]
   );
 
   if (!open) return null;

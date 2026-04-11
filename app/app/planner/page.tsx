@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Employee, Store, Shift, ShiftAssignment, Vacation } from '@/types/database';
 import { getDaysInMonth, formatDate } from '@/lib/utils';
@@ -89,8 +88,7 @@ function formatWeekId(weekYear: number, weekNumber: number): string {
 
 type PlannerPrintWeekCount = 1 | 2 | 3;
 
-function PlannerPageInner() {
-  const { companyId } = useCompany();
+export default function PlannerPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -236,9 +234,8 @@ function PlannerPageInner() {
   }, []);
 
   const pendingStoreStorageKey = useMemo(
-    () =>
-      `planner-pending-stores:v2:${companyId ?? '_none_'}:${year}-${String(month + 1).padStart(2, '0')}`,
-    [companyId, year, month]
+    () => `planner-pending-stores:${year}-${String(month + 1).padStart(2, '0')}`,
+    [year, month]
   );
 
   useEffect(() => {
@@ -266,16 +263,6 @@ function PlannerPageInner() {
       setStoresLoaded(false);
     }
     try {
-      if (!companyId) {
-        setEmployees([]);
-        setStores([]);
-        setStoresLoaded(true);
-        setShifts([]);
-        setAssignments([]);
-        setVacations([]);
-        return;
-      }
-
       const anchorDate =
         new Date().getFullYear() === year && new Date().getMonth() === month
           ? new Date()
@@ -292,11 +279,10 @@ function PlannerPageInner() {
         supabase
           .from('employees')
           .select('*')
-          .eq('company_id', companyId)
           .order('sort_order', { ascending: true, nullsFirst: false })
           .order('name', { ascending: true }),
-        supabase.from('stores').select('id,name,color').eq('company_id', companyId).order('name'),
-        supabase.from('shifts').select('*').eq('company_id', companyId).order('start_time'),
+        supabase.from('stores').select('id,name,color').order('name'),
+        supabase.from('shifts').select('*').order('start_time'),
         supabase
           .from('shift_assignments')
           .select(`
@@ -307,13 +293,11 @@ function PlannerPageInner() {
               color
             )
           `)
-          .eq('company_id', companyId)
           .gte('date', rangeStartStr)
           .lte('date', rangeEndStr),
         supabase
           .from('vacations')
           .select('*')
-          .eq('company_id', companyId)
           .lte('start_date', rangeEndStr)
           .gte('end_date', rangeStartStr),
       ]);
@@ -348,7 +332,7 @@ function PlannerPageInner() {
         setLoading(false);
       }
     }
-  }, [year, month, companyId]);
+  }, [year, month]);
 
   useEffect(() => {
     fetchAllData();
@@ -385,10 +369,6 @@ function PlannerPageInner() {
     dateStr: string,
     statusType: 'FREI' | 'KRANK' | 'FERIEN'
   ) => {
-    if (!companyId) {
-      console.warn('Status drop skipped: no company_id (superadmin without tenant).');
-      return;
-    }
     try {
       const { error } = await supabase
         .from('shift_assignments')
@@ -401,7 +381,6 @@ function PlannerPageInner() {
             store_id: null,
             custom_start_time: null,
             custom_end_time: null,
-            company_id: companyId,
           },
           { onConflict: 'employee_id,date' }
         );
@@ -415,7 +394,7 @@ function PlannerPageInner() {
     } catch (e: any) {
       console.error('Status drop save failed:', e?.message || e);
     }
-  }, [fetchAllData, companyId]);
+  }, [fetchAllData]);
 
   const swapEmployeePosition = useCallback(async (employeeId: string, newPosition: number) => {
     if (savingEmployeeOrder) return;
@@ -501,14 +480,17 @@ function PlannerPageInner() {
 
   if (loading || !storesLoaded) {
     return (
-      <Layout>
-        <div className="text-center">{t.loading}</div>
-      </Layout>
+      <AuthGuard>
+        <Layout>
+          <div className="text-center">{t.loading}</div>
+        </Layout>
+      </AuthGuard>
     );
   }
 
   return (
-    <Layout
+    <AuthGuard>
+      <Layout
         plannerControls={
           <>
             <h1 className="whitespace-nowrap text-sm font-semibold text-gray-900">{t.monthlyPlanner}</h1>
@@ -816,13 +798,6 @@ function PlannerPageInner() {
           }
         `}</style>
       </Layout>
-  );
-}
-
-export default function PlannerPage() {
-  return (
-    <AuthGuard>
-      <PlannerPageInner />
     </AuthGuard>
   );
 }

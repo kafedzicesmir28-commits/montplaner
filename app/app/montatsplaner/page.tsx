@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { Montatsplaner, type HeaderEmployee } from '@/components/montatsplaner';
 import { PlannerStateManager, usePlanner } from '@/components/montatsplaner/PlannerStateManager';
 import { exportPlannerExcel, exportPlannerPdf } from '@/components/montatsplaner/exportService';
@@ -122,37 +121,20 @@ function MontatsplanerShell({
 }
 
 export default function MontatsplanerPage() {
-  return (
-    <AuthGuard>
-      <Layout>
-        <MontatsplanerPageInner />
-      </Layout>
-    </AuthGuard>
-  );
-}
-
-function MontatsplanerPageInner() {
-  const { companyId } = useCompany();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [employees, setEmployees] = useState<HeaderEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
-  const storageTenantKey = companyId ?? '_no_company_';
 
   const loadEmployees = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      if (!companyId) {
-        setEmployees([]);
-        return;
-      }
       const { data: empRows, error: empErr } = await supabase
         .from('employees')
         .select('id, name')
-        .eq('company_id', companyId)
         .order('name');
       if (empErr) throw empErr;
       const list = (empRows || []).map((e) => ({ id: e.id as string, name: e.name as string }));
@@ -162,31 +144,32 @@ function MontatsplanerPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, []);
 
   useEffect(() => {
     void loadEmployees();
   }, [loadEmployees]);
 
   return (
-    <div className="print:bg-white w-full min-w-0 max-w-full">
-      {!companyId ? (
-        <p className="text-sm text-amber-800 print:hidden">{t.tenantNoCompanySave}</p>
-      ) : null}
-      {error ? (
-        <p className="mb-4 text-sm text-red-600 print:hidden" role="alert">
-          {error}
-        </p>
-      ) : null}
+    <AuthGuard>
+      <Layout>
+        <div className="print:bg-white w-full min-w-0 max-w-full">
+          {error ? (
+            <p className="mb-4 text-sm text-red-600 print:hidden" role="alert">
+              {error}
+            </p>
+          ) : null}
 
-      {loading ? (
-        <p className="text-sm text-gray-600">{t.loading}</p>
-      ) : companyId ? (
-        <PlannerStateManager year={year} employeeIds={employeeIds} storageTenantKey={storageTenantKey}>
-          <MontatsplanerShell year={year} onYearChange={setYear} employees={employees} />
-        </PlannerStateManager>
-      ) : null}
-    </div>
+          {loading ? (
+            <p className="text-sm text-gray-600">{t.loading}</p>
+          ) : (
+            <PlannerStateManager year={year} employeeIds={employeeIds}>
+              <MontatsplanerShell year={year} onYearChange={setYear} employees={employees} />
+            </PlannerStateManager>
+          )}
+        </div>
+      </Layout>
+    </AuthGuard>
   );
 }
 

@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Vacation, Employee } from '@/types/database';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
@@ -91,15 +90,6 @@ function intersects(startA: Date, endA: Date, startB: Date, endB: Date): boolean
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 export default function VacationsPage() {
-  return (
-    <AuthGuard>
-      <VacationsPageInner />
-    </AuthGuard>
-  );
-}
-
-function VacationsPageInner() {
-  const { companyId } = useCompany();
   const [vacations, setVacations] = useState<(Vacation & { employee?: Employee })[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,20 +101,18 @@ function VacationsPageInner() {
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
     try {
-      if (!companyId) {
-        setVacations([]);
-        setEmployees([]);
-        return;
-      }
       const [vacationsRes, employeesRes] = await Promise.all([
         supabase
           .from('vacations')
           .select('*')
-          .eq('company_id', companyId)
           .order('start_date', { ascending: false }),
-        supabase.from('employees').select('*').eq('company_id', companyId).order('name'),
+        supabase.from('employees').select('*').order('name'),
       ]);
 
       if (vacationsRes.error) throw vacationsRes.error;
@@ -147,11 +135,7 @@ function VacationsPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
-
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,14 +146,9 @@ function VacationsPageInner() {
     }
 
     try {
-      if (!companyId) {
-        alert(t.tenantNoCompanySave);
-        return;
-      }
       const overlapCheck = await supabase
         .from('vacations')
         .select('id, employee_id, start_date, end_date')
-        .eq('company_id', companyId)
         .lte('start_date', endDate)
         .gte('end_date', startDate);
       if (overlapCheck.error) throw overlapCheck.error;
@@ -202,7 +181,6 @@ function VacationsPageInner() {
             employee_id: employeeId,
             start_date: startDate,
             end_date: endDate,
-            company_id: companyId,
           },
         ]);
 
@@ -350,7 +328,7 @@ function VacationsPageInner() {
   }, []);
 
   return (
-    <>
+    <AuthGuard>
       <Layout>
         {loading ? (
           <div className="text-center">{t.loading}</div>
@@ -433,7 +411,7 @@ function VacationsPageInner() {
                       <th
                         key={`${m.monthIndex}-${idx}`}
                         colSpan={m.count}
-                        className={`border border-gray-300 px-2 py-2 text-center font-semibold print:px-1.5 print:py-2 print:text-xs ${idx < monthSpans.length - 1 ? 'month-divider' : ''}`}
+                        className="month-divider border border-gray-300 px-2 py-2 text-center font-semibold print:px-1.5 print:py-2 print:text-xs"
                       >
                         {MONTH_SHORT[m.monthIndex]}
                       </th>
@@ -443,17 +421,18 @@ function VacationsPageInner() {
                     <th className="sticky left-0 z-20 border border-gray-300 bg-gray-50 px-3 py-1 text-left font-semibold print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
                       Woche
                     </th>
-                    {weeks.map((w, wi) => {
-                      const monthDivider =
-                        wi < weeks.length - 1 && weeks[wi + 1]!.monthIndex !== w.monthIndex;
+                    {weeks.map((w, weekIdx) => {
+                      const isEndOfMonthGroup =
+                        weekIdx === weeks.length - 1 ||
+                        weeks[weekIdx + 1]!.monthIndex !== w.monthIndex;
                       return (
-                      <th
-                        key={w.weekNumber}
-                        className={`border border-gray-300 px-1 py-1 text-[10px] font-medium print:min-w-[1.5rem] print:px-0.5 print:py-1.5 print:text-[10px] ${monthDivider ? 'month-divider' : ''}`}
-                      >
-                        {w.weekNumber}
-                      </th>
-                    );
+                        <th
+                          key={w.weekNumber}
+                          className={`border border-gray-300 px-1 py-1 text-[10px] font-medium print:min-w-[1.5rem] print:px-0.5 print:py-1.5 print:text-[10px]${isEndOfMonthGroup ? ' month-divider' : ''}`}
+                        >
+                          {w.weekNumber}
+                        </th>
+                      );
                     })}
                   </tr>
                 </thead>
@@ -465,7 +444,10 @@ function VacationsPageInner() {
                         <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900 print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
                           {emp.name}
                         </td>
-                        {weeks.map((w, wi) => {
+                        {weeks.map((w, weekIdx) => {
+                          const isEndOfMonthGroup =
+                            weekIdx === weeks.length - 1 ||
+                            weeks[weekIdx + 1]!.monthIndex !== w.monthIndex;
                           const vacDaysInWeek = empVac.reduce((sum, v) => {
                             const s = toDateOnly(v.start_date);
                             const e = toDateOnly(v.end_date);
@@ -483,14 +465,12 @@ function VacationsPageInner() {
                               : active && weekColor === 'orange'
                                 ? 'bg-orange-300/90 print:bg-orange-300/90'
                                 : '';
-                          const monthDivider =
-                            wi < weeks.length - 1 && weeks[wi + 1]!.monthIndex !== w.monthIndex;
 
                           return (
                             <td
                               key={`${emp.id}-${w.weekNumber}`}
                               title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
-                              className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}${monthDivider ? ' month-divider' : ''}`}
+                              className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}${isEndOfMonthGroup ? ' month-divider' : ''}`}
                             >
                               {active ? vacDaysInWeek : ''}
                             </td>
@@ -680,8 +660,9 @@ function VacationsPageInner() {
         )}
       </Layout>
       <style jsx global>{`
-        .vacations-print-table .month-divider {
-          border-right: 1px solid #94a3b8;
+        .vacations-print-table th.month-divider,
+        .vacations-print-table td.month-divider {
+          border-right: 1px solid #000;
         }
         @media print {
           * {
@@ -698,7 +679,7 @@ function VacationsPageInner() {
           }
         }
       `}</style>
-    </>
+    </AuthGuard>
   );
 }
 

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { getEmployeeMonthlyHourTotals, type PlannerShiftAssignmentRow } from '@/lib/hoursCalculator';
 import { assignmentTotalWorkHours } from '@/lib/reportsAnalytics';
@@ -45,8 +44,7 @@ function monthLabel(yyyyMm: string): string {
   return d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
 }
 
-function ReportsHubPageInner() {
-  const { companyId } = useCompany();
+export default function ReportsHubPage() {
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setDate(1);
@@ -79,36 +77,25 @@ function ReportsHubPageInner() {
       setLoading(false);
       return;
     }
-    if (!companyId) {
-      setStores([]);
-      setAssignments([]);
-      setEmployees([]);
-      setEmployeeMonthPaid(new Map());
-      setLoading(false);
-      return;
-    }
 
     const months = monthsFirstOfMonthInRange(startDate, endDate);
 
     try {
       const [storesRes, employeesRes, assignRes, vacRes] = await Promise.all([
-        supabase.from('stores').select('*').eq('company_id', companyId).order('name'),
+        supabase.from('stores').select('*').order('name'),
         supabase
           .from('employees')
           .select('*')
-          .eq('company_id', companyId)
           .order('sort_order', { ascending: true, nullsFirst: false })
           .order('name', { ascending: true }),
         supabase
           .from('shift_assignments')
           .select('*, shift:shifts(*)')
-          .eq('company_id', companyId)
           .gte('date', startDate)
           .lte('date', endDate),
         supabase
           .from('vacations')
           .select('*')
-          .eq('company_id', companyId)
           .lte('start_date', endDate)
           .gte('end_date', startDate),
       ]);
@@ -147,7 +134,7 @@ function ReportsHubPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, rangeInvalid, companyId]);
+  }, [startDate, endDate, rangeInvalid]);
 
   useEffect(() => {
     void load();
@@ -272,11 +259,19 @@ function ReportsHubPageInner() {
   }, [monthRows, totals.monthCostMap]);
 
   if (loading) {
-    return <div className="text-center text-gray-600">{t.loading}</div>;
+    return (
+      <AuthGuard>
+        <Layout>
+          <div className="text-center text-gray-600">{t.loading}</div>
+        </Layout>
+      </AuthGuard>
+    );
   }
 
   return (
-    <div className="space-y-8">
+    <AuthGuard>
+      <Layout>
+        <div className="space-y-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-gray-900">{t.reportsTitle}</h1>
@@ -535,15 +530,7 @@ function ReportsHubPageInner() {
               </section>
             </>
           )}
-    </div>
-  );
-}
-
-export default function ReportsHubPage() {
-  return (
-    <AuthGuard>
-      <Layout>
-        <ReportsHubPageInner />
+        </div>
       </Layout>
     </AuthGuard>
   );

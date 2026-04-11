@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Vacation } from '@/types/database';
 import { formatErrorMessage } from '@/lib/utils';
@@ -24,9 +23,8 @@ function vacationInclusiveDays(startDate: string, endDate: string): number {
 
 type VacationWithDays = Vacation & { dayCount: number };
 
-function EmployeeVacationReportInner() {
+export default function EmployeeVacationReportPage() {
   const params = useParams();
-  const { companyId } = useCompany();
   const employeeId = typeof params.employeeId === 'string' ? params.employeeId : '';
 
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -39,17 +37,11 @@ function EmployeeVacationReportInner() {
     setLoading(true);
     setError(null);
     try {
-      if (!companyId) {
-        setEmployee(null);
-        setVacations([]);
-        return;
-      }
       const [empRes, vacRes] = await Promise.all([
-        supabase.from('employees').select('*').eq('id', employeeId).eq('company_id', companyId).maybeSingle(),
+        supabase.from('employees').select('*').eq('id', employeeId).maybeSingle(),
         supabase
           .from('vacations')
           .select('*')
-          .eq('company_id', companyId)
           .eq('employee_id', employeeId)
           .order('start_date', { ascending: true }),
       ]);
@@ -71,7 +63,7 @@ function EmployeeVacationReportInner() {
     } finally {
       setLoading(false);
     }
-  }, [employeeId, companyId]);
+  }, [employeeId]);
 
   useEffect(() => {
     void load();
@@ -92,11 +84,19 @@ function EmployeeVacationReportInner() {
   })();
 
   if (!employeeId) {
-    return <p className="text-sm text-red-600">Invalid employee.</p>;
+    return (
+      <AuthGuard>
+        <Layout>
+          <p className="text-sm text-red-600">Invalid employee.</p>
+        </Layout>
+      </AuthGuard>
+    );
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <AuthGuard>
+      <Layout>
+        <div className="mx-auto max-w-4xl space-y-8">
           <header>
             <h1 className="text-2xl font-bold text-gray-900">
               Vacation overview
@@ -224,15 +224,7 @@ function EmployeeVacationReportInner() {
               </section>
             </>
           )}
-    </div>
-  );
-}
-
-export default function EmployeeVacationReportPage() {
-  return (
-    <AuthGuard>
-      <Layout>
-        <EmployeeVacationReportInner />
+        </div>
       </Layout>
     </AuthGuard>
   );

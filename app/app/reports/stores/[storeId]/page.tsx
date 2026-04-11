@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
 import { formatDate, formatErrorMessage } from '@/lib/utils';
@@ -63,9 +62,8 @@ function isoWeekKey(dateStr: string): { label: string; sort: string } {
   };
 }
 
-function StoreMonthlyOverviewInner() {
+export default function StoreMonthlyOverviewPage() {
   const params = useParams();
-  const { companyId } = useCompany();
   const storeId = typeof params.storeId === 'string' ? params.storeId : '';
 
   const [monthValue, setMonthValue] = useState(() => {
@@ -97,17 +95,11 @@ function StoreMonthlyOverviewInner() {
     setLoading(true);
     setError(null);
     try {
-      if (!companyId) {
-        setStore(null);
-        setAssignments([]);
-        return;
-      }
       const [storeRes, assignRes] = await Promise.all([
-        supabase.from('stores').select('*').eq('id', storeId).eq('company_id', companyId).maybeSingle(),
+        supabase.from('stores').select('*').eq('id', storeId).maybeSingle(),
         supabase
           .from('shift_assignments')
           .select('*, employee:employees(*), shift:shifts(*)')
-          .eq('company_id', companyId)
           .eq('store_id', storeId)
           .gte('date', monthStart)
           .lte('date', monthEnd)
@@ -133,7 +125,7 @@ function StoreMonthlyOverviewInner() {
     } finally {
       setLoading(false);
     }
-  }, [storeId, monthStart, monthEnd, companyId]);
+  }, [storeId, monthStart, monthEnd]);
 
   useEffect(() => {
     void load();
@@ -158,11 +150,19 @@ function StoreMonthlyOverviewInner() {
   const headerFg = contrastingText(headerBg);
 
   if (!storeId) {
-    return <p className="text-sm text-red-600">Invalid store.</p>;
+    return (
+      <AuthGuard>
+        <Layout>
+          <p className="text-sm text-red-600">Invalid store.</p>
+        </Layout>
+      </AuthGuard>
+    );
   }
 
   return (
-    <div className="space-y-4">
+    <AuthGuard>
+      <Layout>
+        <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
             <div
               className="rounded-md border border-gray-400 px-4 py-3 shadow-sm"
@@ -272,15 +272,7 @@ function StoreMonthlyOverviewInner() {
               </table>
             </div>
           )}
-    </div>
-  );
-}
-
-export default function StoreMonthlyOverviewPage() {
-  return (
-    <AuthGuard>
-      <Layout>
-        <StoreMonthlyOverviewInner />
+        </div>
       </Layout>
     </AuthGuard>
   );

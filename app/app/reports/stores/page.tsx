@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
-import { useCompany } from '@/contexts/CompanyContext';
 import { supabase } from '@/lib/supabaseClient';
 import { assignmentTotalWorkHours } from '@/lib/reportsAnalytics';
 import { formatDate, formatErrorMessage, formatWorkHoursDisplay, parseYmdLocal } from '@/lib/utils';
@@ -36,8 +35,7 @@ function resolveEmployee(row: AssignRow): Employee | null {
 
 type EmployeeHours = { employeeId: string; name: string; hours: number };
 
-function StoreOverviewPageInner() {
-  const { companyId } = useCompany();
+export default function StoreOverviewPage() {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -66,19 +64,12 @@ function StoreOverviewPageInner() {
       setLoading(false);
       return;
     }
-    if (!companyId) {
-      setStores([]);
-      setAssignments([]);
-      setLoading(false);
-      return;
-    }
     try {
       const [storesRes, assignRes] = await Promise.all([
-        supabase.from('stores').select('*').eq('company_id', companyId).order('name', { ascending: true }),
+        supabase.from('stores').select('*').order('name', { ascending: true }),
         supabase
           .from('shift_assignments')
           .select('*, shift:shifts(*), employee:employees(*)')
-          .eq('company_id', companyId)
           .gte('date', startDate)
           .lte('date', endDate),
       ]);
@@ -93,7 +84,7 @@ function StoreOverviewPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, rangeInvalid, companyId]);
+  }, [startDate, endDate, rangeInvalid]);
 
   useEffect(() => {
     void load();
@@ -143,11 +134,19 @@ function StoreOverviewPageInner() {
   );
 
   if (loading) {
-    return <div className="text-center text-gray-600">{t.loading}</div>;
+    return (
+      <AuthGuard>
+        <Layout>
+          <div className="text-center text-gray-600">{t.loading}</div>
+        </Layout>
+      </AuthGuard>
+    );
   }
 
   return (
-    <div className="space-y-8">
+    <AuthGuard>
+      <Layout>
+        <div className="space-y-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-gray-900">{t.storeOverviewTitle}</h1>
@@ -260,15 +259,7 @@ function StoreOverviewPageInner() {
               )}
             </>
           )}
-    </div>
-  );
-}
-
-export default function StoreOverviewPage() {
-  return (
-    <AuthGuard>
-      <Layout>
-        <StoreOverviewPageInner />
+        </div>
       </Layout>
     </AuthGuard>
   );
