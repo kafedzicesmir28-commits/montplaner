@@ -411,7 +411,7 @@ export default function VacationsPage() {
                       <th
                         key={`${m.monthIndex}-${idx}`}
                         colSpan={m.count}
-                        className="border border-gray-300 px-2 py-2 text-center font-semibold print:px-1.5 print:py-2 print:text-xs"
+                        className={`border border-gray-300 px-2 py-2 text-center font-semibold print:px-1.5 print:py-2 print:text-xs ${idx < monthSpans.length - 1 ? 'month-divider' : ''}`}
                       >
                         {MONTH_SHORT[m.monthIndex]}
                       </th>
@@ -421,14 +421,18 @@ export default function VacationsPage() {
                     <th className="sticky left-0 z-20 border border-gray-300 bg-gray-50 px-3 py-1 text-left font-semibold print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
                       Woche
                     </th>
-                    {weeks.map((w) => (
+                    {weeks.map((w, wi) => {
+                      const monthDivider =
+                        wi < weeks.length - 1 && weeks[wi + 1]!.monthIndex !== w.monthIndex;
+                      return (
                       <th
                         key={w.weekNumber}
-                        className="border border-gray-300 px-1 py-1 text-[10px] font-medium print:min-w-[1.5rem] print:px-0.5 print:py-1.5 print:text-[10px]"
+                        className={`border border-gray-300 px-1 py-1 text-[10px] font-medium print:min-w-[1.5rem] print:px-0.5 print:py-1.5 print:text-[10px] ${monthDivider ? 'month-divider' : ''}`}
                       >
                         {w.weekNumber}
                       </th>
-                    ))}
+                    );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -439,7 +443,7 @@ export default function VacationsPage() {
                         <td className="sticky left-0 z-10 border border-gray-300 bg-inherit px-3 py-1.5 font-medium text-gray-900 print:static print:z-0 print:px-2 print:py-1.5 print:text-sm">
                           {emp.name}
                         </td>
-                        {weeks.map((w) => {
+                        {weeks.map((w, wi) => {
                           const vacDaysInWeek = empVac.reduce((sum, v) => {
                             const s = toDateOnly(v.start_date);
                             const e = toDateOnly(v.end_date);
@@ -457,12 +461,14 @@ export default function VacationsPage() {
                               : active && weekColor === 'orange'
                                 ? 'bg-orange-300/90 print:bg-orange-300/90'
                                 : '';
+                          const monthDivider =
+                            wi < weeks.length - 1 && weeks[wi + 1]!.monthIndex !== w.monthIndex;
 
                           return (
                             <td
                               key={`${emp.id}-${w.weekNumber}`}
                               title={active ? `${vacDaysInWeek} vacation day(s)` : ''}
-                              className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}`}
+                              className={`h-6 min-w-6 border border-gray-300 text-center print:h-auto print:min-w-[1.25rem] print:py-1 print:text-xs ${vacationToneClass}${monthDivider ? ' month-divider' : ''}`}
                             >
                               {active ? vacDaysInWeek : ''}
                             </td>
@@ -652,6 +658,9 @@ export default function VacationsPage() {
         )}
       </Layout>
       <style jsx global>{`
+        .vacations-print-table .month-divider {
+          border-right: 1px solid #94a3b8;
+        }
         @media print {
           * {
             -webkit-print-color-adjust: exact !important;
