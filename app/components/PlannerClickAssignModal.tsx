@@ -8,6 +8,7 @@ import {
   snapToPlannerBreakMinutes,
   upsertQuickPlannerShift,
 } from '@/lib/plannerShiftQuickAssign';
+import { shiftPlannerAbbrev } from '@/lib/plannerShiftAbbrev';
 import { t } from '@/lib/translations';
 
 type StoreRow = Pick<Store, 'id' | 'name'> & { color?: string | null };
@@ -54,6 +55,12 @@ export type PlannerClickAssignModalProps = {
   shifts: Shift[];
   onClose: () => void;
   onSaved: () => void | Promise<void>;
+  /** Same as planner drag status (Frei / KR / FE). When omitted, status buttons are hidden. */
+  onPickStatus?: (
+    employeeId: string,
+    dateStr: string,
+    statusType: 'FREI' | 'KRANK' | 'FERIEN'
+  ) => void | Promise<void>;
 };
 
 export function PlannerClickAssignModal({
@@ -67,6 +74,7 @@ export function PlannerClickAssignModal({
   shifts,
   onClose,
   onSaved,
+  onPickStatus,
 }: PlannerClickAssignModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [storeId, setStoreId] = useState<string>('');
@@ -115,6 +123,63 @@ export function PlannerClickAssignModal({
     },
     [assignmentId, availableShifts, dateStr, employeeId, onSaved, resetAndClose, storeId]
   );
+
+  const handlePickDayStatus = useCallback(
+    async (statusType: 'FREI' | 'KRANK' | 'FERIEN') => {
+      if (!onPickStatus) return;
+      setSaving(true);
+      setError(null);
+      try {
+        await Promise.resolve(onPickStatus(employeeId, dateStr, statusType));
+        await Promise.resolve(onSaved());
+        resetAndClose();
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        setError(message || 'Speichern fehlgeschlagen');
+      } finally {
+        setSaving(false);
+      }
+    },
+    [dateStr, employeeId, onPickStatus, onSaved, resetAndClose]
+  );
+
+  const dayStatusSection =
+    onPickStatus ? (
+      <div className="mt-5 border-t border-gray-200 pt-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          {t.plannerClickAssignDayStatus}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void handlePickDayStatus('FREI')}
+            className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-800 shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: '#d1d5db' }}
+          >
+            {t.plannerStatusLabelFrei}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void handlePickDayStatus('KRANK')}
+            className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-900 shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: '#f87171' }}
+          >
+            {t.plannerStatusLabelKrank}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void handlePickDayStatus('FERIEN')}
+            className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-900 shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: '#bbf7d0' }}
+          >
+            {t.plannerStatusLabelFerie}
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   if (!open) return null;
 
@@ -165,6 +230,7 @@ export function PlannerClickAssignModal({
                 );
               })}
             </div>
+            {dayStatusSection}
           </div>
         ) : (
           <div className="mt-4">
@@ -203,7 +269,10 @@ export function PlannerClickAssignModal({
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {availableShifts.map((s, idx) => (
+                {availableShifts.map((s, idx) => {
+                  const shiftLabel = s.code?.trim() || s.name?.trim() || '';
+                  const shiftAbbrev = shiftPlannerAbbrev(shiftLabel);
+                  return (
                   <button
                     key={s.id}
                     type="button"
@@ -216,7 +285,9 @@ export function PlannerClickAssignModal({
                       border: `1px solid ${storeColor}`,
                     }}
                   >
-                    <div className="font-semibold">{s.name}</div>
+                    <div className="font-semibold" title={shiftLabel || s.name}>
+                      {shiftAbbrev || '—'}
+                    </div>
                     <div className="text-xs opacity-90">
                       {formatClock(s.start_time)} – {formatClock(s.end_time)}
                     </div>
@@ -224,9 +295,11 @@ export function PlannerClickAssignModal({
                       {t.plannerPauseAbbrev} {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
+            {dayStatusSection}
           </div>
         )}
 

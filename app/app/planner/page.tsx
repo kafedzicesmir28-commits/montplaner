@@ -495,7 +495,7 @@ export default function PlannerPage() {
           <>
             <h1 className="whitespace-nowrap text-sm font-semibold text-gray-900">{t.monthlyPlanner}</h1>
             <h2 className="whitespace-nowrap text-sm font-semibold text-gray-700">
-              {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
             </h2>
             <button
               onClick={() => changeMonth(-1)}
@@ -676,7 +676,7 @@ export default function PlannerPage() {
               <div ref={printRootRef} className="space-y-2">
                 <div className="text-center print:px-0">
                   <h1 className="planner-print-title text-lg font-bold leading-tight text-gray-900">
-                    {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    {t.monthlyPlanner} — {currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
                     {' — '}
                     {printTitleWeekLabels.join(', ')}
                   </h1>
@@ -762,9 +762,100 @@ export default function PlannerPage() {
 
             #planner-print-area table {
               width: 100% !important;
-              font-size: clamp(8px, 1.75mm, 11px) !important;
+              font-size: clamp(12px, 2.5mm, 16px) !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
+            }
+
+            /* Default print table text (shift cards override below) */
+            #planner-print-area table th *,
+            #planner-print-area table td * {
+              font-size: clamp(12px, 2.5mm, 16px) !important;
+              line-height: 1.2 !important;
+            }
+
+            #planner-print-area table input {
+              font-size: clamp(13px, 2.7mm, 17px) !important;
+            }
+
+            /*
+             * Shift cells (print): code + time same size; pause smaller (same 11/13 ratio as screen).
+             * Layout: code left, time right — same as screen; shared sans + tabular-nums.
+             */
+            #planner-print-area table td:has(.planner-day-card) {
+              overflow: visible !important;
+              vertical-align: middle !important;
+              padding: 0.38rem 0.5rem !important;
+            }
+            /* Uniform card height: shifts + Frei/KR/Ferie + vacation + previews */
+            #planner-print-area .planner-day-card {
+              box-sizing: border-box !important;
+              min-height: 24mm !important;
+            }
+            #planner-print-area .planner-shift-card {
+              box-sizing: border-box !important;
+              padding: 0.48rem 0.55rem !important;
+              gap: 0.28rem !important;
+              justify-content: center !important;
+              font-family: ui-sans-serif, system-ui, sans-serif !important;
+            }
+            #planner-print-area .planner-shift-card-row {
+              flex-direction: row !important;
+              flex-wrap: wrap !important;
+              align-items: center !important;
+              justify-content: center !important;
+              gap: 0.35rem 0.5rem !important;
+              width: 100% !important;
+              min-height: 0 !important;
+              padding-left: 0.15rem !important;
+              padding-right: 0.15rem !important;
+              text-align: center !important;
+            }
+            #planner-print-area .planner-shift-card-code {
+              flex-shrink: 0 !important;
+              width: auto !important;
+              max-width: none !important;
+              text-align: center !important;
+              font-family: inherit !important;
+              font-size: clamp(20px, 4.8mm, 34px) !important;
+              font-weight: 600 !important;
+              font-variant-numeric: tabular-nums lining-nums !important;
+              line-height: 1.12 !important;
+            }
+            #planner-print-area .planner-shift-card-time {
+              flex: 0 0 auto !important;
+              min-width: 0 !important;
+              width: auto !important;
+              margin-left: 0 !important;
+              text-align: center !important;
+              font-family: inherit !important;
+              font-variant-numeric: tabular-nums lining-nums !important;
+            }
+            #planner-print-area .planner-shift-card-time span {
+              display: inline-block !important;
+              width: auto !important;
+              max-width: 100% !important;
+              text-align: center !important;
+              white-space: normal !important;
+              word-break: break-word !important;
+              overflow-wrap: anywhere !important;
+              font-family: inherit !important;
+              font-size: clamp(20px, 4.8mm, 34px) !important;
+              font-weight: 600 !important;
+              font-variant-numeric: tabular-nums lining-nums !important;
+              line-height: 1.12 !important;
+            }
+            /* Nested under .planner-shift-card so this beats #planner-print-area table td * */
+            #planner-print-area .planner-shift-card .planner-shift-card-pause {
+              margin-top: 0.12rem !important;
+              padding-top: 0.1rem !important;
+              font-family: inherit !important;
+              font-size: clamp(17px, 4.05mm, 29px) !important;
+              font-weight: 500 !important;
+              font-variant-numeric: tabular-nums lining-nums !important;
+              line-height: 1.25 !important;
+              text-align: center !important;
+              opacity: 0.8 !important;
             }
 
             #planner-print-area thead,
@@ -775,13 +866,13 @@ export default function PlannerPage() {
             }
 
             .planner-print-title {
-              font-size: clamp(10px, 2.2mm, 14px) !important;
+              font-size: clamp(14px, 3mm, 19px) !important;
               margin: 0 0 6px !important;
             }
 
             #planner-print-area table th,
             #planner-print-area table td {
-              padding: 0.12rem 0.28rem !important;
+              padding: 0.2rem 0.38rem !important;
             }
 
             html,
