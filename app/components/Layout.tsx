@@ -151,7 +151,7 @@ export default function Layout({
       <main
         className={
           isMontatsplanerRoute
-            ? 'mx-0 w-full max-w-none min-w-0 px-0 py-2 sm:py-2 print:max-w-none print:px-2 print:py-4'
+            ? 'mx-0 flex w-full max-w-none min-w-0 flex-col items-stretch justify-start px-0 py-2 sm:py-2 print:max-w-none print:justify-start print:px-0 print:py-0'
             : 'mx-auto w-full max-w-full min-w-0 px-3 py-4 sm:px-6 sm:py-8 lg:px-8 print:max-w-none print:px-2 print:py-4 ' +
               (isPlannerRoute
                 ? 'max-w-none py-2 sm:py-3 lg:px-6 xl:px-8'

@@ -84,6 +84,13 @@ function MontatsplanerShell({
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-2 sm:gap-3 sm:px-3 print:hidden">
         <h1 className="text-xl font-semibold text-gray-900">{t.monthlyPlanner}</h1>
         <div className="flex flex-wrap items-center gap-4">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="border border-gray-400 bg-white px-3 py-1.5 text-sm text-gray-900"
+          >
+            {t.monthlyPlannerPrint}
+          </button>
           <MontatsplanerExports employees={employees} />
           <label className="flex items-center gap-2 text-sm text-gray-800">
             <span>Monat</span>
@@ -153,7 +160,7 @@ export default function MontatsplanerPage() {
   return (
     <AuthGuard>
       <Layout>
-        <div className="print:bg-white w-full min-w-0 max-w-full">
+        <div className="print:bg-white w-full min-w-0 max-w-full print:p-0">
           {error ? (
             <p className="mb-4 text-sm text-red-600 print:hidden" role="alert">
               {error}

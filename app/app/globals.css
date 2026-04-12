@@ -98,8 +98,16 @@ td {
 }
 
 @media print {
+  html,
   body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100%;
+    height: auto;
     background: #fff !important;
+  }
+
+  body {
     color: #111 !important;
   }
 
@@ -118,6 +126,7 @@ td {
   }
 
   .planner-print-area {
+    page: planner-landscape;
     max-width: 100%;
   }
 
@@ -145,9 +154,29 @@ td {
     line-height: 1.12 !important;
   }
 
+  /* Named pages: default for ad-hoc prints; planner stays landscape; Monatsplaner uses portrait A4 (see module). */
   @page {
+    margin: 8mm;
+  }
+
+  @page planner-landscape {
     size: A4 landscape;
     margin: 8mm;
+  }
+
+  @page montatsplaner-a4 {
+    size: A4;
+    margin: 0;
+  }
+
+  #monthsplanner-print-area,
+  #monthsplanner-print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #monthsplanner-print-area table {
+    max-width: none !important;
   }
 }
 

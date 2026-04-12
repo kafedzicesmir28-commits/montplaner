@@ -73,6 +73,8 @@ export const t = {
 
   // Planner
   monthlyPlanner: 'Monatsplaner',
+  /** Monthly planner: open browser print dialog (A4 layout) */
+  monthlyPlannerPrint: 'Drucken',
   /** Browser / screen exit from planner (navbar is hidden on this page) */
   plannerBack: 'Zurück',
   previous: '← Zurück',

@@ -2,7 +2,7 @@
 
 
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './montatsplaner.module.css';
 
 import { HeaderRow, type HeaderEmployee } from './HeaderRow';
@@ -62,8 +62,54 @@ type Props = {
 export function Montatsplaner({ year, employees }: Props) {
   const topScrollRef = useRef<HTMLDivElement>(null);
   const bottomScrollRef = useRef<HTMLDivElement>(null);
+  const printFrameRef = useRef<HTMLDivElement>(null);
+  const printSlotRef = useRef<HTMLDivElement>(null);
+  const printScaleRef = useRef<HTMLDivElement>(null);
   const syncingFromRef = useRef<'top' | 'bottom' | null>(null);
   const [tableWidth, setTableWidth] = useState(0);
+
+  const applyPrintScale = useCallback(() => {
+    const frame = printFrameRef.current;
+    const slot = printSlotRef.current;
+    const layer = printScaleRef.current;
+    if (!frame || !slot || !layer) return;
+    const pw = frame.clientWidth;
+    const ph = frame.clientHeight;
+    const w = layer.scrollWidth;
+    const h = layer.scrollHeight;
+    const s = pw > 0 && ph > 0 && w > 0 && h > 0 ? Math.min(pw / w, ph / h) : 1;
+    layer.style.width = `${w}px`;
+    layer.style.height = `${h}px`;
+    layer.style.transform = `scale(${s})`;
+    layer.style.transformOrigin = '0 0';
+    slot.style.width = `${w * s}px`;
+    slot.style.height = `${h * s}px`;
+  }, []);
+
+  const clearPrintScale = useCallback(() => {
+    const slot = printSlotRef.current;
+    const layer = printScaleRef.current;
+    layer?.style.removeProperty('width');
+    layer?.style.removeProperty('height');
+    layer?.style.removeProperty('transform');
+    layer?.style.removeProperty('transform-origin');
+    slot?.style.removeProperty('width');
+    slot?.style.removeProperty('height');
+  }, []);
+
+  useEffect(() => {
+    const onBeforePrint = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(applyPrintScale);
+      });
+    };
+    window.addEventListener('beforeprint', onBeforePrint);
+    window.addEventListener('afterprint', clearPrintScale);
+    return () => {
+      window.removeEventListener('beforeprint', onBeforePrint);
+      window.removeEventListener('afterprint', clearPrintScale);
+    };
+  }, [applyPrintScale, clearPrintScale]);
 
   useEffect(() => {
     const measure = () => {
@@ -118,24 +164,30 @@ export function Montatsplaner({ year, employees }: Props) {
   }, []);
 
   return (
-    <div id="monthsplanner-print-area" className={styles.printOuter}>
-      <div id="montatsplaner-export-root" className={styles.root}>
-        <div ref={topScrollRef} className={styles.topScroll}>
-          <div style={{ width: tableWidth, height: 1 }} aria-hidden />
-        </div>
-        <div ref={bottomScrollRef} className={styles.bottomScroll}>
-          <table className={styles.table}>
-            <HeaderRow year={year} employees={employees} />
-            {MONTH_LABELS.map((label, idx) => (
-              <MonthBlock
-                key={MONTH_KEYS[idx]}
-                monthLabel={label}
-                monthKey={MONTH_KEYS[idx]}
-                employees={employees}
-              />
-            ))}
-            <TotalBlock employees={employees} />
-          </table>
+    <div id="monthsplanner-print-area" className={`${styles.printOuter} ${styles.printPageRoot}`}>
+      <div ref={printFrameRef} className={styles.printViewport}>
+        <div ref={printSlotRef} className={styles.printScaleSlot}>
+          <div ref={printScaleRef} className={styles.printScaleLayer}>
+            <div id="montatsplaner-export-root" className={styles.root}>
+              <div ref={topScrollRef} className={styles.topScroll}>
+                <div style={{ width: tableWidth, height: 1 }} aria-hidden />
+              </div>
+              <div ref={bottomScrollRef} className={styles.bottomScroll}>
+                <table className={styles.table}>
+                  <HeaderRow year={year} employees={employees} />
+                  {MONTH_LABELS.map((label, idx) => (
+                    <MonthBlock
+                      key={MONTH_KEYS[idx]}
+                      monthLabel={label}
+                      monthKey={MONTH_KEYS[idx]}
+                      employees={employees}
+                    />
+                  ))}
+                  <TotalBlock employees={employees} />
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
