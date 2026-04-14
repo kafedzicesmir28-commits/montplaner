@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import { Employee, Store, Shift, ShiftAssignment, Vacation } from '@/types/database';
 import { getDaysInMonth, formatDate } from '@/lib/utils';
+import { fetchCompanyPrintName } from '@/lib/fetchCompanyPrintName';
 import { t } from '@/lib/translations';
 import PlannerGrid from '@/components/PlannerGrid';
 import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
@@ -110,6 +111,7 @@ export default function PlannerPage() {
   /** Unscaled content (title + grid); used to compute fit-to-page scale. */
   const printRootRef = useRef<HTMLDivElement>(null);
   const printScaleWrapperRef = useRef<HTMLDivElement>(null);
+  const [companyPrintName, setCompanyPrintName] = useState(t.printCompanyNameFallback);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -337,6 +339,13 @@ export default function PlannerPage() {
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
+
+  useEffect(() => {
+    void (async () => {
+      const name = await fetchCompanyPrintName(supabase);
+      setCompanyPrintName(name);
+    })();
+  }, []);
 
   useEffect(() => {
     const onStoresUpdated = () => {
@@ -675,6 +684,9 @@ export default function PlannerPage() {
             >
               <div ref={printRootRef} className="space-y-2">
                 <div className="text-center print:px-0">
+                  <p className="planner-print-company-name mb-2 text-center text-[20px] font-bold leading-tight text-gray-900 print:mb-3 print:border-b print:border-gray-400 print:pb-3">
+                    {companyPrintName}
+                  </p>
                   <h1 className="planner-print-title text-lg font-bold leading-tight text-gray-900">
                     {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     {' — '}
@@ -719,6 +731,11 @@ export default function PlannerPage() {
             #planner-print-area,
             #planner-print-area * {
               visibility: visible !important;
+            }
+
+            .planner-print-company-name {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
 
             body > div.min-h-screen {

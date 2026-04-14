@@ -24,6 +24,8 @@ export default function Layout({
 
   const navItems = [
     { href: '/dashboard', label: t.dashboard },
+    { href: '/settings', label: t.settings },
+    { href: '/import', label: t.importData },
     { href: '/employees', label: t.employees },
     { href: '/stores', label: t.stores },
     { href: '/shifts', label: t.shifts },

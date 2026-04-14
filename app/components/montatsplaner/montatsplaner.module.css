@@ -21,6 +21,22 @@
   flex-direction: column;
 }
 
+/* Company title: visible for PDF (html2canvas); also in browser print */
+.companyPrintHeader {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px 12px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.25;
+  color: #111827;
+  background: #ffffff;
+  border-bottom: 1px solid #cfd6de;
+}
+
 .topScroll {
   box-sizing: border-box;
   width: 100%;
@@ -355,6 +371,14 @@
     print-color-adjust: exact !important;
     font-size: 8.5pt !important;
     line-height: 1.2 !important;
+  }
+
+  .companyPrintHeader {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 14pt !important;
+    line-height: 1.25 !important;
+    padding: 6px 4px 8px !important;
   }
 
   .topScroll {

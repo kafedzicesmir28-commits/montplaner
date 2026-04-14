@@ -7,6 +7,7 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/lib/supabaseClient';
 import { Vacation, Employee } from '@/types/database';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
+import { fetchCompanyPrintName } from '@/lib/fetchCompanyPrintName';
 import { t } from '@/lib/translations';
 
 type WeeklyVacationRow = {
@@ -100,9 +101,17 @@ export default function VacationsPage() {
   const [endDate, setEndDate] = useState('');
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [companyPrintName, setCompanyPrintName] = useState(t.printCompanyNameFallback);
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const name = await fetchCompanyPrintName(supabase);
+      setCompanyPrintName(name);
+    })();
   }, []);
 
   const fetchData = async () => {
@@ -392,10 +401,13 @@ export default function VacationsPage() {
             className="vacations-print-area overflow-auto rounded-lg border border-gray-300 bg-white shadow-sm print:overflow-visible print:shadow-none print:rounded-none"
           >
             <div className="hidden print:block print:border-b print:border-gray-400 print:bg-white print:px-2 print:py-3">
-              <h1 className="text-xl font-bold text-gray-900">
+              <p className="vacations-print-company-name text-center text-[20px] font-bold leading-tight text-gray-900 print:mb-2">
+                {companyPrintName}
+              </p>
+              <h1 className="text-center text-xl font-bold text-gray-900">
                 {t.vacationsPrintTitle} {selectedYear}
               </h1>
-              <p className="mt-1 text-sm text-gray-600">{t.vacationsTitle}</p>
+              <p className="mt-1 text-center text-sm text-gray-600">{t.vacationsTitle}</p>
             </div>
             <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 print:border-gray-400 print:bg-gray-100 print:py-2.5 print:text-base">
               Ferienplan {selectedYear}
@@ -485,6 +497,15 @@ export default function VacationsPage() {
           </div>
 
           <div id="print-vacation-list" className="vacations-data-table rounded-lg bg-white shadow overflow-hidden">
+            <div className="hidden print:block print:border-b print:border-gray-400 print:bg-white print:px-2 print:py-3">
+              <p className="vacations-print-company-name text-center text-[20px] font-bold leading-tight text-gray-900 print:mb-2">
+                {companyPrintName}
+              </p>
+              <h1 className="text-center text-xl font-bold text-gray-900">
+                {t.vacationsPrintTitle} {selectedYear}
+              </h1>
+              <p className="mt-1 text-center text-sm text-gray-600">{t.vacationsTitle}</p>
+            </div>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -666,6 +687,10 @@ export default function VacationsPage() {
         }
         @media print {
           * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .vacations-print-company-name {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }

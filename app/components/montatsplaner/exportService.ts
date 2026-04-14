@@ -197,9 +197,8 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
   const el = document.getElementById(elementId) as HTMLElement | null;
   if (!el) return;
 
-  const children = Array.from(el.children) as HTMLElement[];
-  const topScroll = children[0] ?? null;
-  const bottomScroll = children[1] ?? null;
+  const topScroll = el.querySelector<HTMLElement>('[data-mp-top-scroll]');
+  const bottomScroll = el.querySelector<HTMLElement>('[data-mp-bottom-scroll]');
 
   const snap = {
     el: {

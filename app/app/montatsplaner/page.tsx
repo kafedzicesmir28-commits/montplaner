@@ -7,6 +7,7 @@ import { Montatsplaner, type HeaderEmployee } from '@/components/montatsplaner';
 import { PlannerStateManager, usePlanner } from '@/components/montatsplaner/PlannerStateManager';
 import { exportPlannerExcel, exportPlannerPdf } from '@/components/montatsplaner/exportService';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchCompanyPrintName } from '@/lib/fetchCompanyPrintName';
 import { t } from '@/lib/translations';
 import { formatErrorMessage } from '@/lib/utils';
 
@@ -60,10 +61,12 @@ function MontatsplanerShell({
   year,
   onYearChange,
   employees,
+  companyPrintName,
 }: {
   year: number;
   onYearChange: (y: number) => void;
   employees: HeaderEmployee[];
+  companyPrintName: string;
 }) {
   const [selectedMonth, setSelectedMonth] = useState<string>(MONTH_OPTIONS[0].key);
 
@@ -122,7 +125,7 @@ function MontatsplanerShell({
           </label>
         </div>
       </div>
-      <Montatsplaner year={year} employees={employees} />
+      <Montatsplaner year={year} employees={employees} companyPrintName={companyPrintName} />
     </>
   );
 }
@@ -132,6 +135,7 @@ export default function MontatsplanerPage() {
   const [employees, setEmployees] = useState<HeaderEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [companyPrintName, setCompanyPrintName] = useState(() => t.printCompanyNameFallback);
 
   const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
 
@@ -157,6 +161,13 @@ export default function MontatsplanerPage() {
     void loadEmployees();
   }, [loadEmployees]);
 
+  useEffect(() => {
+    void (async () => {
+      const name = await fetchCompanyPrintName(supabase);
+      setCompanyPrintName(name);
+    })();
+  }, []);
+
   return (
     <AuthGuard>
       <Layout>
@@ -171,7 +182,12 @@ export default function MontatsplanerPage() {
             <p className="text-sm text-gray-600">{t.loading}</p>
           ) : (
             <PlannerStateManager year={year} employeeIds={employeeIds}>
-              <MontatsplanerShell year={year} onYearChange={setYear} employees={employees} />
+              <MontatsplanerShell
+                year={year}
+                onYearChange={setYear}
+                employees={employees}
+                companyPrintName={companyPrintName}
+              />
             </PlannerStateManager>
           )}
         </div>

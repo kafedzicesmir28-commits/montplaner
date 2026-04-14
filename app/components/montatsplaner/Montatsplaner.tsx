@@ -55,11 +55,14 @@ type Props = {
 
   employees: HeaderEmployee[];
 
+  /** Shown above the grid in UI, print, and PDF export (from settings / fallback). */
+  companyPrintName: string;
+
 };
 
 
 
-export function Montatsplaner({ year, employees }: Props) {
+export function Montatsplaner({ year, employees, companyPrintName }: Props) {
   const topScrollRef = useRef<HTMLDivElement>(null);
   const bottomScrollRef = useRef<HTMLDivElement>(null);
   const printFrameRef = useRef<HTMLDivElement>(null);
@@ -169,10 +172,11 @@ export function Montatsplaner({ year, employees }: Props) {
         <div ref={printSlotRef} className={styles.printScaleSlot}>
           <div ref={printScaleRef} className={styles.printScaleLayer}>
             <div id="montatsplaner-export-root" className={styles.root}>
-              <div ref={topScrollRef} className={styles.topScroll}>
+              <div className={styles.companyPrintHeader}>{companyPrintName}</div>
+              <div ref={topScrollRef} data-mp-top-scroll className={styles.topScroll}>
                 <div style={{ width: tableWidth, height: 1 }} aria-hidden />
               </div>
-              <div ref={bottomScrollRef} className={styles.bottomScroll}>
+              <div ref={bottomScrollRef} data-mp-bottom-scroll className={styles.bottomScroll}>
                 <table className={styles.table}>
                   <HeaderRow year={year} employees={employees} />
                   {MONTH_LABELS.map((label, idx) => (
