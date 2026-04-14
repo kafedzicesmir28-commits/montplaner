@@ -1,0 +1,70 @@
+import { ImportConfig, ImportType } from '@/lib/import/types';
+
+export const importConfig: Record<ImportType, ImportConfig> = {
+  employees: {
+    type: 'employees',
+    label: 'Employees',
+    table: 'employees',
+    fields: [
+      'id',
+      'name',
+      'employment_start_date',
+      'birth_date',
+      'is_active',
+      'sort_order',
+      'hourly_rate',
+      'store_id',
+      'company_id',
+      'created_at',
+    ],
+    requiredFields: ['name'],
+    duplicateKey: 'name',
+    templateRows: [['', 'Sanja', '2026-01-01', '1990-05-20', 'true', '1', '24.50', '', '', '2024-04-13T14:31:12.658Z']],
+  },
+  stores: {
+    type: 'stores',
+    label: 'Stores',
+    table: 'stores',
+    fields: ['id', 'name', 'color', 'company_id'],
+    requiredFields: ['name'],
+    duplicateKey: 'name',
+    templateRows: [['', 'Store A', '#3b82f6', '']],
+  },
+  shifts: {
+    type: 'shifts',
+    label: 'Shifts',
+    table: 'shifts',
+    fields: ['id', 'name', 'code', 'store_id', 'start_time', 'end_time', 'break_minutes', 'is_global', 'company_id'],
+    requiredFields: ['name', 'start_time', 'end_time'],
+    templateRows: [['', 'Morning', 'M', '', '08:00', '16:00', '30', 'false', '']],
+  },
+  vacations: {
+    type: 'vacations',
+    label: 'Vacations',
+    table: 'vacations',
+    fields: ['employee_id', 'start_date', 'end_date', 'company_id'],
+    requiredFields: ['employee_id', 'start_date', 'end_date'],
+    templateRows: [['<employee-uuid>', '2026-05-01', '2026-05-05', '<company-uuid>']],
+  },
+  shift_assignments: {
+    type: 'shift_assignments',
+    label: 'Shift Assignments',
+    table: 'shift_assignments',
+    fields: [
+      'id',
+      'employee_id',
+      'date',
+      'shift_id',
+      'store_id',
+      'custom_start_time',
+      'custom_end_time',
+      'assignment_type',
+      'custom_break_minutes',
+      'company_id',
+    ],
+    requiredFields: ['employee_id', 'date'],
+    templateRows: [['', '<employee-uuid>', '2026-04-05', '<shift-uuid>', '<store-uuid>', '', '', 'SHIFT', '0', '']],
+  },
+};
+
+export const importTypeOrder: ImportType[] = ['employees', 'stores', 'shifts', 'vacations', 'shift_assignments'];

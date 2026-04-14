@@ -222,6 +222,10 @@ export default function PlannerGrid({
   useEffect(() => {
     const onDocMouseDown = (e: MouseEvent) => {
       if (!editingKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-planner-shift-edit-modal="true"]')) {
+        return;
+      }
       const root = gridRef.current;
       if (root && !root.contains(e.target as Node)) {
         setEditingKey(null);

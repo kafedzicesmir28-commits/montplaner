@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Shift, ShiftAssignment, Store } from '@/types/database';
 import { supabase } from '@/lib/supabaseClient';
 import { effectiveBreakMinutes, formatErrorMessage } from '@/lib/utils';
@@ -206,6 +207,7 @@ export default function PlannerCell({
   const [isDragOver, setIsDragOver] = useState(false);
   const startTimeSelectRef = useRef<HTMLSelectElement | null>(null);
   const endTimeSelectRef = useRef<HTMLSelectElement | null>(null);
+  const shiftSelectRef = useRef<HTMLSelectElement | null>(null);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -244,9 +246,11 @@ export default function PlannerCell({
   useEffect(() => {
     if (!isEditing) return;
     const id = window.requestAnimationFrame(() => {
-      startTimeSelectRef.current?.focus();
+      shiftSelectRef.current?.focus();
       const startSelected = startTimeSelectRef.current?.selectedOptions?.[0];
       const endSelected = endTimeSelectRef.current?.selectedOptions?.[0];
+      const shiftSelected = shiftSelectRef.current?.selectedOptions?.[0];
+      shiftSelected?.scrollIntoView({ block: 'center' });
       startSelected?.scrollIntoView({ block: 'center' });
       endSelected?.scrollIntoView({ block: 'center' });
     });
@@ -551,6 +555,13 @@ export default function PlannerCell({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   const hasPersistedShift = Boolean(assignment?.shift_id);
   const simplifiedShiftOnlyMode = enableStoreDrop && lockStoreSelection && !hasPersistedShift;
+  const showFullEditModal =
+    isEditing &&
+    !isVacation &&
+    assignmentType === 'SHIFT' &&
+    !simplifiedShiftOnlyMode &&
+    !readOnly &&
+    Boolean(assignment?.shift_id);
 
   const editorMinWidth = isEditing ? 148 : undefined;
   const cardStyle = {
@@ -681,6 +692,194 @@ export default function PlannerCell({
             </button>
           ) : null}
         </div>
+      ) : showFullEditModal ? (
+        <>
+          {assignment && shift ? (
+            <div className="p-1">
+              <div
+                className="flex min-h-[56px] flex-col items-center justify-center gap-0 rounded-md px-1 py-0.5 text-center text-[10px] font-medium leading-tight"
+                style={cardStyle}
+              >
+                <div className="max-w-full truncate font-semibold tracking-tight" title={code}>
+                  {code || '—'}
+                </div>
+                <div
+                  className="planner-cell-hours mt-0.5 min-w-0 max-w-full truncate text-[15px] font-medium tabular-nums leading-tight"
+                  title={timeLine || undefined}
+                >
+                  {timeLine || '—'}
+                </div>
+                {displayBreakMinutes > 0 ? (
+                  <div
+                    className="planner-cell-numeric mt-0.5 min-w-0 max-w-full truncate text-sm tabular-nums leading-tight opacity-70"
+                    title={`${t.plannerPauseAbbrev} ${displayBreakMinutes}`}
+                  >
+                    {t.plannerPauseAbbrev} {displayBreakMinutes}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center px-1 py-2 text-center text-[10px] font-normal opacity-70">—</div>
+          )}
+          {typeof document !== 'undefined'
+            ? createPortal(
+                <div
+                  data-planner-shift-edit-modal="true"
+                  className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-3 sm:p-4"
+                  onClick={() => onCloseCellEdit?.()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="planner-shift-edit-title"
+                >
+                  <div
+                    data-planner-shift-edit-modal="true"
+                    className="w-[min(96vw,860px)] max-h-[92vh] overflow-y-auto rounded-xl border border-gray-200 bg-white p-5 text-base shadow-2xl sm:min-w-[640px] sm:p-6"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="mb-4 flex items-start justify-between gap-3 sm:mb-5">
+                      <div>
+                        <h3 id="planner-shift-edit-title" className="text-xl font-semibold text-gray-900 sm:text-2xl">
+                          Edit Shift
+                        </h3>
+                        <p className="mt-1 text-base text-gray-600">
+                          Update shift type, time, and break for this day.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onCloseCellEdit?.()}
+                        disabled={saving}
+                        aria-label="Close edit panel"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 bg-white text-xl font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div className="space-y-5 sm:space-y-6">
+                      <section className="space-y-2.5">
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-gray-500">Shift</h4>
+                        <label className="block text-base font-medium text-gray-700">
+                          Shift Type
+                        </label>
+                        <select
+                          ref={shiftSelectRef}
+                          value={shiftId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setShiftId(id);
+                            const s = shifts.find((x) => x.id === id);
+                            setBreakMinutes(snapToPlannerBreakMinutes(s?.break_minutes ?? 0));
+                          }}
+                          disabled={!selectedStoreId}
+                          className="h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-base text-gray-900 shadow-sm sm:h-12"
+                        >
+                          <option value="">
+                            {selectedStoreId ? t.selectShift : 'Drop a store first'}
+                          </option>
+                          {availableShifts.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </section>
+
+                      <section className="space-y-2.5">
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-gray-500">Time</h4>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                          <div>
+                            <label className="mb-1.5 block text-base font-medium text-gray-700">Start Time</label>
+                            <select
+                              ref={startTimeSelectRef}
+                              value={customStart}
+                              onChange={(e) => setCustomStart(e.target.value)}
+                              className="planner-cell-hours h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-base text-gray-900 tabular-nums shadow-sm sm:h-12"
+                            >
+                              {TIME_OPTIONS.map((time) => (
+                                <option key={`start-${time}`} value={time}>
+                                  {time}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-base font-medium text-gray-700">End Time</label>
+                            <select
+                              ref={endTimeSelectRef}
+                              value={customEnd}
+                              onChange={(e) => setCustomEnd(e.target.value)}
+                              className="planner-cell-hours h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-base text-gray-900 tabular-nums shadow-sm sm:h-12"
+                            >
+                              {TIME_OPTIONS.map((time) => (
+                                <option key={`end-${time}`} value={time}>
+                                  {time}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="space-y-2.5">
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-gray-500">Break</h4>
+                        <label className="block text-base font-medium text-gray-700">{t.plannerBreakSelect}</label>
+                        <select
+                          value={String(breakMinutes)}
+                          onChange={(e) => setBreakMinutes(snapToPlannerBreakMinutes(Number(e.target.value)))}
+                          className="planner-cell-numeric h-11 w-full rounded-md border border-gray-300 bg-white px-3 text-base text-gray-900 tabular-nums shadow-sm sm:h-12"
+                          title={t.breakMinutes}
+                        >
+                          {PLANNER_BREAK_OPTIONS.map((n) => (
+                            <option key={n} value={n}>
+                              {n === 0 ? t.plannerBreakNone : `${n} min`}
+                            </option>
+                          ))}
+                        </select>
+                      </section>
+                    </div>
+
+                    {saveError ? <div className="mt-4 rounded-md bg-red-50 px-3 py-2 text-base text-red-700">{saveError}</div> : null}
+
+                    <div className="mt-5 flex flex-col-reverse gap-2 border-t border-gray-200 pt-4 sm:flex-row sm:justify-between">
+                      <div>
+                        {assignment ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteCustomOverride()}
+                            disabled={saving}
+                            className="h-11 rounded-md border border-red-300 bg-red-50 px-6 text-base font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onCloseCellEdit?.()}
+                          disabled={saving}
+                          className="h-11 rounded-md border border-gray-300 bg-white px-5 text-base font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {t.cancel}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void persist(true)}
+                          disabled={saving}
+                          className="h-11 rounded-md bg-blue-600 px-7 text-base font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>,
+                document.body
+              )
+            : null}
+        </>
       ) : isEditing ? (
         <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
           {!simplifiedShiftOnlyMode ? (
