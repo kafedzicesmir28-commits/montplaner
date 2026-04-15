@@ -552,7 +552,7 @@ export default function PlannerCell({
   const hasPersistedShift = Boolean(assignment?.shift_id);
   const simplifiedShiftOnlyMode = enableStoreDrop && lockStoreSelection && !hasPersistedShift;
 
-  const editorMinWidth = isEditing ? 148 : undefined;
+  const editorMinWidth = isEditing ? 220 : undefined;
   const cardStyle = {
     backgroundColor,
     color,
@@ -581,7 +581,7 @@ export default function PlannerCell({
           ? '4px solid #FFD700'
           : `1px solid ${isEditing ? '#2563eb' : '#e5e7eb'}`,
         minWidth: editorMinWidth ?? 96,
-        maxWidth: isEditing ? 200 : 122,
+        maxWidth: isEditing ? 320 : 122,
         minHeight: 72,
         height: 'auto',
         verticalAlign: 'middle',
@@ -682,17 +682,23 @@ export default function PlannerCell({
           ) : null}
         </div>
       ) : isEditing ? (
-        <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
+        <div
+          className="rounded-lg border border-blue-100 bg-gradient-to-b from-white via-blue-50/40 to-indigo-50/40 px-2 py-2 shadow-[0_1px_6px_rgba(37,99,235,0.08)]"
+          onClick={stop}
+          onMouseDown={stop}
+        >
           {!simplifiedShiftOnlyMode ? (
-            <div className="mb-0.5 flex items-center justify-between gap-0.5">
-              <span className="text-[8px] font-bold uppercase opacity-80">{t.assignShift}</span>
-              {saving ? <span className="text-[8px] opacity-80">…</span> : null}
+            <div className="mb-2 flex items-center justify-between gap-1">
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-blue-900">
+                {t.assignShift}
+              </span>
+              {saving ? <span className="text-xs opacity-80">Saving...</span> : null}
             </div>
           ) : null}
           {simplifiedShiftOnlyMode ? (
-            <div className="mb-0.5 flex flex-col gap-2 p-2">
+            <div className="mb-1 flex flex-col gap-2 p-1">
               {availableShifts.length === 0 ? (
-                <div className="rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-[10px] text-blue-800">
+                <div className="rounded border border-blue-200 bg-blue-50 px-2 py-1.5 text-sm text-blue-800">
                   {t.plannerNoShiftsForStore}
                 </div>
               ) : (
@@ -705,7 +711,7 @@ export default function PlannerCell({
                     }}
                     disabled={saving}
                     autoFocus={idx === 0}
-                    className="w-full rounded-md px-2.5 py-2 text-left text-[10px] font-medium transition-all hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full rounded-md px-3 py-2.5 text-left text-sm font-medium shadow-sm transition-all hover:-translate-y-[1px] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
                     style={{
                       backgroundColor:
                         shiftId === s.id ? selectedStoreColor : withAlpha(selectedStoreColor, 0.2),
@@ -714,11 +720,11 @@ export default function PlannerCell({
                       transform: shiftId === s.id ? 'scale(1.02)' : undefined,
                     }}
                   >
-                    <div className="truncate text-[11px] font-semibold">{s.name}</div>
-                    <div className="planner-cell-hours text-xs font-medium tabular-nums leading-snug">
+                    <div className="truncate text-sm font-semibold">{s.name}</div>
+                    <div className="planner-cell-hours text-base font-semibold tabular-nums leading-snug">
                       {formatClock(s.start_time)} – {formatClock(s.end_time)}
                     </div>
-                    <div className="planner-cell-numeric text-xs font-medium tabular-nums leading-snug">
+                    <div className="planner-cell-numeric text-sm font-medium tabular-nums leading-snug">
                       Break: {snapToPlannerBreakMinutes(s.break_minutes ?? 0)}m
                     </div>
                   </button>
@@ -735,7 +741,7 @@ export default function PlannerCell({
                 setBreakMinutes(snapToPlannerBreakMinutes(s?.break_minutes ?? 0));
               }}
               disabled={!selectedStoreId}
-              className="mb-0.5 w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+              className="mb-2 w-full max-w-full rounded-md border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             >
               <option value="">
                 {selectedStoreId ? t.selectShift : 'Drop a store first'}
@@ -753,7 +759,7 @@ export default function PlannerCell({
                 <select
                   value={selectedStoreId}
                   disabled
-                  className="mb-0.5 w-full max-w-full cursor-not-allowed rounded border border-gray-300 bg-gray-100 px-0.5 py-0.5 text-[9px] text-gray-700"
+                  className="mb-2 w-full max-w-full cursor-not-allowed rounded-md border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-700 shadow-sm"
                 >
                   {(selectedStoreId ? stores.filter((st) => st.id === selectedStoreId) : stores).map((st) => (
                     <option key={st.id} value={st.id}>
@@ -765,7 +771,7 @@ export default function PlannerCell({
                 <select
                   value={storeId}
                   onChange={(e) => setStoreId(e.target.value)}
-                  className="mb-0.5 w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[9px] text-gray-900"
+                  className="mb-2 w-full max-w-full rounded-md border border-blue-200 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 >
                   {!assignment ? <option value="">{t.selectStore}</option> : null}
                   {stores.map((st) => (
@@ -775,14 +781,14 @@ export default function PlannerCell({
                   ))}
                 </select>
               )}
-              <label className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide opacity-80">
                 Start Time
               </label>
               <select
                 ref={startTimeSelectRef}
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="planner-cell-hours mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[11px] text-gray-900 tabular-nums"
+                className="planner-cell-hours mb-2 w-full min-w-0 rounded-md border border-indigo-200 bg-white px-2 py-1.5 text-base font-semibold text-gray-900 tabular-nums shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
               >
                 {TIME_OPTIONS.map((time) => (
                   <option key={`start-${time}`} value={time}>
@@ -790,14 +796,14 @@ export default function PlannerCell({
                   </option>
                 ))}
               </select>
-              <label className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide opacity-80">
                 End Time
               </label>
               <select
                 ref={endTimeSelectRef}
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="planner-cell-hours mb-0.5 w-full min-w-0 rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[11px] text-gray-900 tabular-nums"
+                className="planner-cell-hours mb-2 w-full min-w-0 rounded-md border border-indigo-200 bg-white px-2 py-1.5 text-base font-semibold text-gray-900 tabular-nums shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
               >
                 {TIME_OPTIONS.map((time) => (
                   <option key={`end-${time}`} value={time}>
@@ -805,12 +811,12 @@ export default function PlannerCell({
                   </option>
                 ))}
               </select>
-              <div className="mb-0.5">
-                <span className="mb-0.5 block text-[8px] font-semibold uppercase opacity-80">{t.plannerBreakSelect}</span>
+              <div className="mb-1">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide opacity-80">{t.plannerBreakSelect}</span>
                 <select
                   value={String(breakMinutes)}
                   onChange={(e) => setBreakMinutes(snapToPlannerBreakMinutes(Number(e.target.value)))}
-                  className="planner-cell-numeric w-full max-w-full rounded border border-gray-300 bg-white px-0.5 py-0.5 text-[11px] text-gray-900 tabular-nums"
+                  className="planner-cell-numeric w-full max-w-full rounded-md border border-violet-200 bg-white px-2 py-1.5 text-base font-semibold text-gray-900 tabular-nums shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
                   title={t.breakMinutes}
                 >
                   {PLANNER_BREAK_OPTIONS.map((n) => (
@@ -823,12 +829,12 @@ export default function PlannerCell({
             </>
           ) : null}
           {!simplifiedShiftOnlyMode ? (
-            <div className="mt-0.5 flex items-center gap-1">
+            <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => void persist(true)}
                 disabled={saving}
-                className="flex-1 rounded border border-blue-300 bg-blue-50 py-0.5 text-[8px] font-semibold text-blue-800 hover:bg-blue-100"
+                className="flex-1 rounded-md border border-blue-400 bg-gradient-to-b from-blue-100 to-blue-200 py-1.5 text-sm font-semibold text-blue-900 shadow-sm transition hover:from-blue-200 hover:to-blue-300"
               >
                 Save
               </button>
@@ -837,14 +843,14 @@ export default function PlannerCell({
                   type="button"
                   onClick={() => void handleDeleteCustomOverride()}
                   disabled={saving}
-                  className="flex-1 rounded border border-red-300 bg-red-50 py-0.5 text-[8px] font-semibold text-red-800 hover:bg-red-100"
+                  className="flex-1 rounded-md border border-rose-300 bg-gradient-to-b from-rose-50 to-rose-100 py-1.5 text-sm font-semibold text-rose-800 shadow-sm transition hover:from-rose-100 hover:to-rose-200"
                 >
                   Delete
                 </button>
               ) : null}
             </div>
           ) : null}
-          {saveError ? <div className="mt-0.5 text-[8px] text-red-700">{saveError}</div> : null}
+          {saveError ? <div className="mt-1 text-xs text-red-700">{saveError}</div> : null}
         </div>
       ) : assignment && shift ? (
         <div

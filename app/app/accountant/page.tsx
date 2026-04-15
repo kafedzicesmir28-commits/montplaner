@@ -14,6 +14,7 @@ import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
 import { formatDate, formatErrorMessage, monthsFirstOfMonthInRange, parseYmdLocal } from '@/lib/utils';
 import { HoursCalculation, Employee, Vacation } from '@/types/database';
 import { t } from '@/lib/translations';
+import { getCurrentAuthProfile } from '@/lib/authProfile';
 
 type RpcRow = {
   normal_hours: number;
@@ -49,6 +50,7 @@ export default function AccountantPage() {
     date.setMonth(date.getMonth() + 1, 0);
     return formatDate(date);
   });
+  const [companyName, setCompanyName] = useState('');
 
   const periodLabel = useMemo(
     () => formatPeriodLabel(startDate, endDate),
@@ -136,6 +138,14 @@ export default function AccountantPage() {
   useEffect(() => {
     void calculateHoursSummary();
   }, [calculateHoursSummary]);
+
+  useEffect(() => {
+    const loadCompanyName = async () => {
+      const profile = await getCurrentAuthProfile();
+      setCompanyName(profile?.company_name ?? '');
+    };
+    void loadCompanyName();
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -295,6 +305,11 @@ export default function AccountantPage() {
     <AuthGuard>
       <Layout>
         <div className="space-y-6 print:space-y-4">
+          <div className="hidden print:block border-b border-gray-300 pb-2 text-center">
+            <p className="text-sm font-semibold text-gray-700">
+              {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+            </p>
+          </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between print:break-inside-avoid">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{t.accountantViewTitle}</h1>

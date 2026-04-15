@@ -8,6 +8,7 @@ import { PLANNER_ASSIGNMENTS_CHANGED } from '@/lib/plannerEvents';
 import { formatDate, formatErrorMessage, formatWorkHoursDisplay } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import type { Employee, Shift, ShiftAssignment, Store } from '@/types/database';
+import { getCurrentAuthProfile } from '@/lib/authProfile';
 
 type AssignmentRow = ShiftAssignment & {
   custom_start_time?: string | null;
@@ -51,6 +52,7 @@ export default function EmployeeMonthlyReport() {
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState('');
 
   const fromDate = useMemo(() => formatDate(new Date(selectedYear, selectedMonth, 1)), [selectedYear, selectedMonth]);
   const toDate = useMemo(() => formatDate(new Date(selectedYear, selectedMonth + 1, 0)), [selectedYear, selectedMonth]);
@@ -148,6 +150,14 @@ export default function EmployeeMonthlyReport() {
   }, [loadEmployees]);
 
   useEffect(() => {
+    const loadCompanyName = async () => {
+      const profile = await getCurrentAuthProfile();
+      setCompanyName(profile?.company_name ?? '');
+    };
+    void loadCompanyName();
+  }, []);
+
+  useEffect(() => {
     if (loadingEmployees) return;
     void loadAssignments();
   }, [loadingEmployees, loadAssignments]);
@@ -189,6 +199,9 @@ export default function EmployeeMonthlyReport() {
     <div className="employee-monthly-report space-y-6 print:max-w-none print:space-y-4">
       {/* Print-only title block */}
       <div className="hidden print:block print:border-b print:border-gray-300 print:pb-4">
+        <p className="text-center text-sm font-semibold text-gray-700">
+          {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+        </p>
         <h1 className="text-xl font-bold text-gray-900">{t.employeeMonthlyTitle}</h1>
         <p className="mt-1 text-sm text-gray-700">
           <span className="font-semibold">{selectedEmployee?.name ?? '—'}</span>

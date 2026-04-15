@@ -193,7 +193,7 @@ export async function exportPlannerExcel(params: {
   URL.revokeObjectURL(url);
 }
 
-export async function exportPlannerPdf(elementId: string): Promise<void> {
+export async function exportPlannerPdf(elementId: string, companyName?: string): Promise<void> {
   const el = document.getElementById(elementId) as HTMLElement | null;
   if (!el) return;
 
@@ -272,8 +272,9 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
     const imgW = canvas.width;
     const imgH = canvas.height;
     const margin = 6;
+    const headerMm = companyName?.trim() ? 8 : 0;
     const usableW = pageW - margin * 2;
-    const usableH = pageH - margin * 2;
+    const usableH = pageH - margin * 2 - headerMm;
 
     // Fit full table **width** to the page; stack extra height pages. Avoids squashing columns like single-page fit.
     const mmPerPx = usableW / imgW;
@@ -283,6 +284,11 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
     while (srcY < imgH - 0.01) {
       if (pageIdx > 0) {
         pdf.addPage('a4', 'landscape');
+      }
+      if (companyName?.trim()) {
+        pdf.setFontSize(11);
+        pdf.setTextColor(70, 70, 70);
+        pdf.text(`Firma: ${companyName}`, pageW / 2, margin + 4, { align: 'center' });
       }
       const remainingPx = imgH - srcY;
       const sliceHmm = Math.min(usableH, remainingPx * mmPerPx);
@@ -301,7 +307,7 @@ export async function exportPlannerPdf(elementId: string): Promise<void> {
 
       const imgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
       const drawHmm = slicePx * mmPerPx;
-      pdf.addImage(imgData, 'JPEG', margin, margin, usableW, drawHmm);
+      pdf.addImage(imgData, 'JPEG', margin, margin + headerMm, usableW, drawHmm);
 
       srcY += slicePx;
       pageIdx++;

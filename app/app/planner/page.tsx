@@ -9,6 +9,7 @@ import { getDaysInMonth, formatDate } from '@/lib/utils';
 import { t } from '@/lib/translations';
 import PlannerGrid from '@/components/PlannerGrid';
 import { resolveStoreColor, storeTextColor } from '@/lib/storeColors';
+import { getCurrentAuthProfile } from '@/lib/authProfile';
 
 type PlannerAssignmentRow = ShiftAssignment & {
   store?: (Store & { color?: string | null }) | null;
@@ -107,6 +108,7 @@ export default function PlannerPage() {
   const [printScale, setPrintScale] = useState(1);
   const [pendingStoreByKey, setPendingStoreByKey] = useState<Record<string, string>>({});
   const [savingEmployeeOrder, setSavingEmployeeOrder] = useState(false);
+  const [companyName, setCompanyName] = useState<string>('');
   /** Unscaled content (title + grid); used to compute fit-to-page scale. */
   const printRootRef = useRef<HTMLDivElement>(null);
   const printScaleWrapperRef = useRef<HTMLDivElement>(null);
@@ -160,6 +162,14 @@ export default function PlannerPage() {
 
   const selectedPrintIsValid =
     selectedStartWeek !== '' && printWeekOptions.some((opt) => opt.id === selectedStartWeek);
+
+  useEffect(() => {
+    const loadCompanyName = async () => {
+      const profile = await getCurrentAuthProfile();
+      setCompanyName(profile?.company_name ?? '');
+    };
+    void loadCompanyName();
+  }, []);
 
   useEffect(() => {
     if (!printSelection || printDays.length === 0) return;
@@ -675,6 +685,9 @@ export default function PlannerPage() {
             >
               <div ref={printRootRef} className="space-y-2">
                 <div className="text-center print:px-0">
+                  <p className="planner-print-company text-sm font-semibold text-gray-700">
+                    {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+                  </p>
                   <h1 className="planner-print-title text-lg font-bold leading-tight text-gray-900">
                     {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     {' — '}
@@ -825,6 +838,11 @@ export default function PlannerPage() {
             .planner-print-title {
               font-size: clamp(10px, 2.2mm, 14px) !important;
               margin: 0 0 6px !important;
+            }
+
+            .planner-print-company {
+              font-size: clamp(9px, 1.9mm, 12px) !important;
+              margin: 0 0 2px !important;
             }
 
             #planner-print-area table th,

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Vacation, Employee } from '@/types/database';
 import { notifyPlannerAssignmentsChanged } from '@/lib/plannerEvents';
 import { t } from '@/lib/translations';
+import { getCurrentAuthProfile } from '@/lib/authProfile';
 
 type WeeklyVacationRow = {
   weekLabel: string;
@@ -100,9 +101,18 @@ export default function VacationsPage() {
   const [endDate, setEndDate] = useState('');
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [companyName, setCompanyName] = useState('');
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const loadCompanyName = async () => {
+      const profile = await getCurrentAuthProfile();
+      setCompanyName(profile?.company_name ?? '');
+    };
+    void loadCompanyName();
   }, []);
 
   const fetchData = async () => {
@@ -392,6 +402,9 @@ export default function VacationsPage() {
             className="vacations-print-area overflow-auto rounded-lg border border-gray-300 bg-white shadow-sm print:overflow-visible print:shadow-none print:rounded-none"
           >
             <div className="hidden print:block print:border-b print:border-gray-400 print:bg-white print:px-2 print:py-3">
+              <p className="text-center text-sm font-semibold text-gray-700">
+                {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+              </p>
               <h1 className="text-xl font-bold text-gray-900">
                 {t.vacationsPrintTitle} {selectedYear}
               </h1>
@@ -485,6 +498,12 @@ export default function VacationsPage() {
           </div>
 
           <div id="print-vacation-list" className="vacations-data-table rounded-lg bg-white shadow overflow-hidden">
+            <div className="hidden print:block border-b border-gray-300 bg-white px-4 py-3">
+              <p className="text-center text-sm font-semibold text-gray-700">
+                {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+              </p>
+              <h2 className="mt-1 text-center text-lg font-bold text-gray-900">{t.vacationsTitle}</h2>
+            </div>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>

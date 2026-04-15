@@ -9,6 +9,7 @@ import { exportPlannerExcel, exportPlannerPdf } from '@/components/montatsplaner
 import { supabase } from '@/lib/supabaseClient';
 import { t } from '@/lib/translations';
 import { formatErrorMessage } from '@/lib/utils';
+import { getCurrentAuthProfile } from '@/lib/authProfile';
 
 const MONTH_OPTIONS = [
   { key: 'januar', label: 'Januar' },
@@ -25,7 +26,7 @@ const MONTH_OPTIONS = [
   { key: 'dezember', label: 'Dezember' },
 ] as const;
 
-function MontatsplanerExports({ employees }: { employees: HeaderEmployee[] }) {
+function MontatsplanerExports({ employees, companyName }: { employees: HeaderEmployee[]; companyName: string }) {
   const { data } = usePlanner();
 
   const onExcel = useCallback(() => {
@@ -33,8 +34,8 @@ function MontatsplanerExports({ employees }: { employees: HeaderEmployee[] }) {
   }, [data, employees]);
 
   const onPdf = useCallback(() => {
-    void exportPlannerPdf('montatsplaner-export-root');
-  }, []);
+    void exportPlannerPdf('montatsplaner-export-root', companyName);
+  }, [companyName]);
 
   return (
     <div className="flex flex-wrap items-center gap-2 print:hidden">
@@ -60,10 +61,12 @@ function MontatsplanerShell({
   year,
   onYearChange,
   employees,
+  companyName,
 }: {
   year: number;
   onYearChange: (y: number) => void;
   employees: HeaderEmployee[];
+  companyName: string;
 }) {
   const [selectedMonth, setSelectedMonth] = useState<string>(MONTH_OPTIONS[0].key);
 
@@ -91,7 +94,7 @@ function MontatsplanerShell({
           >
             {t.monthlyPlannerPrint}
           </button>
-          <MontatsplanerExports employees={employees} />
+          <MontatsplanerExports employees={employees} companyName={companyName} />
           <label className="flex items-center gap-2 text-sm text-gray-800">
             <span>Monat</span>
             <select
@@ -122,6 +125,11 @@ function MontatsplanerShell({
           </label>
         </div>
       </div>
+      <div className="hidden border-b border-gray-300 pb-2 text-center print:block">
+        <p className="text-sm font-semibold text-gray-700">
+          {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+        </p>
+      </div>
       <Montatsplaner year={year} employees={employees} />
     </>
   );
@@ -132,6 +140,7 @@ export default function MontatsplanerPage() {
   const [employees, setEmployees] = useState<HeaderEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState('');
 
   const employeeIds = useMemo(() => employees.map((e) => e.id), [employees]);
 
@@ -157,6 +166,14 @@ export default function MontatsplanerPage() {
     void loadEmployees();
   }, [loadEmployees]);
 
+  useEffect(() => {
+    const loadCompanyName = async () => {
+      const profile = await getCurrentAuthProfile();
+      setCompanyName(profile?.company_name ?? '');
+    };
+    void loadCompanyName();
+  }, []);
+
   return (
     <AuthGuard>
       <Layout>
@@ -171,7 +188,12 @@ export default function MontatsplanerPage() {
             <p className="text-sm text-gray-600">{t.loading}</p>
           ) : (
             <PlannerStateManager year={year} employeeIds={employeeIds}>
-              <MontatsplanerShell year={year} onYearChange={setYear} employees={employees} />
+              <MontatsplanerShell
+                year={year}
+                onYearChange={setYear}
+                employees={employees}
+                companyName={companyName}
+              />
             </PlannerStateManager>
           )}
         </div>
