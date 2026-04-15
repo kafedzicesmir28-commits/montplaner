@@ -34,6 +34,7 @@ export type PlannerGridProps = {
   storesLoaded?: boolean;
   onSwapEmployeePosition?: (employeeId: string, newPosition: number) => void | Promise<void>;
   savingEmployeeOrder?: boolean;
+  showBirthdays?: boolean;
 };
 
 function isVacationDay(vacations: Vacation[], employeeId: string, date: string): boolean {
@@ -144,6 +145,13 @@ function calculateWeeklyHours(
   }, 0);
 }
 
+function isEmployeeBirthdayOnDate(employee: Employee, day: Date): boolean {
+  if (!employee.birth_date) return false;
+  const birth = new Date(`${employee.birth_date}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return false;
+  return birth.getMonth() === day.getMonth() && birth.getDate() === day.getDate();
+}
+
 export default function PlannerGrid({
   employees,
   days,
@@ -166,6 +174,7 @@ export default function PlannerGrid({
   storesLoaded = true,
   onSwapEmployeePosition,
   savingEmployeeOrder = false,
+  showBirthdays = false,
 }: PlannerGridProps) {
   const weekSegments = useMemo(() => segmentDaysByISOWeek(days), [days]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -435,7 +444,7 @@ export default function PlannerGrid({
                   </th>
                   <th
                     scope="row"
-                    className="sticky z-30 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
+                    className="planner-print-employee-name-cell sticky z-30 whitespace-nowrap border border-gray-200 border-r border-gray-200 px-2 py-1.5 text-left text-[13px] font-semibold text-gray-900"
                     style={{
                       left: 44,
                       backgroundColor: workerCardBgColor === '#ffffff' ? rowBgColor : workerCardBgColor,
@@ -525,6 +534,7 @@ export default function PlannerGrid({
                           }
                           onSaved={onAssignmentsUpdated}
                           onCloseCellEdit={() => setEditingKey(null)}
+                          isBirthday={showBirthdays && isEmployeeBirthdayOnDate(employee, day)}
                         />
                       );
                     });

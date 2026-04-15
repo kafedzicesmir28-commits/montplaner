@@ -55,6 +55,7 @@ export default function AdminPage() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [settingPasswordFor, setSettingPasswordFor] = useState<string | null>(null);
+  const [skipDuplicatesOnImport, setSkipDuplicatesOnImport] = useState(true);
 
   const companyOptions = useMemo(() => overview?.companies ?? [], [overview]);
 
@@ -231,6 +232,7 @@ export default function AdminPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('skipDuplicates', skipDuplicatesOnImport ? 'true' : 'false');
       const res = await fetch('/api/admin/import', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -238,7 +240,15 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Failed to import data');
-      setActionMessage('Import complete.');
+      const skipped = Number(data?.skipped_duplicates ?? 0);
+      const imported = Array.isArray(data?.imported)
+        ? data.imported.reduce((sum: number, row: { rows?: number }) => sum + Number(row.rows ?? 0), 0)
+        : 0;
+      if (skipDuplicatesOnImport) {
+        setActionMessage(`Import complete. Imported ${imported} rows, skipped ${skipped} duplicates.`);
+      } else {
+        setActionMessage('Import complete.');
+      }
       await loadOverview(token);
     } catch (e: unknown) {
       setActionMessage(e instanceof Error ? e.message : 'Failed to import data');
@@ -305,7 +315,20 @@ export default function AdminPage() {
                       }}
                     />
                   </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={skipDuplicatesOnImport}
+                      onChange={(e) => setSkipDuplicatesOnImport(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Skip duplicates
+                  </label>
                 </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Import expects the exported backup ZIP. If <span className="font-semibold">Skip duplicates</span> is enabled,
+                  rows with existing IDs are ignored instead of imported again.
+                </p>
                 {actionMessage ? <p className="mt-3 text-sm text-gray-700">{actionMessage}</p> : null}
               </section>
 

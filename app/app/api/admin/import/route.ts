@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
     const { admin } = await requireSuperadmin(request);
     const formData = await request.formData();
     const file = formData.get('file');
+    const skipDuplicatesRaw = String(formData.get('skipDuplicates') ?? 'false').toLowerCase();
+    const skipDuplicates = skipDuplicatesRaw === 'true' || skipDuplicatesRaw === '1' || skipDuplicatesRaw === 'on';
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'Zip file is required' }, { status: 400 });
@@ -84,6 +86,7 @@ export async function POST(request: NextRequest) {
     const zip = await JSZip.loadAsync(content);
     const entries = Object.keys(zip.files);
     const summaries: Array<{ table: BackupTableName; rows: number }> = [];
+    let skippedDuplicates = 0;
 
     for (const entryName of entries) {
       const normalized = entryName.split('/').pop() ?? entryName;
@@ -92,7 +95,28 @@ export async function POST(request: NextRequest) {
       if (zip.files[entryName]?.dir) continue;
 
       const csvContent = await zip.files[entryName].async('string');
-      const rows = parseCsvRows(csvContent);
+      let rows = parseCsvRows(csvContent);
+
+      if (skipDuplicates && rows.length > 0) {
+        const ids = rows
+          .map((row) => row.id)
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+        if (ids.length > 0) {
+          const { data: existingRows, error: existingError } = await admin
+            .from(tableName)
+            .select('id')
+            .in('id', ids);
+          if (existingError) throw existingError;
+          const existingIds = new Set((existingRows ?? []).map((r: { id?: string | null }) => String(r.id ?? '')));
+          const before = rows.length;
+          rows = rows.filter((row) => {
+            const id = row.id;
+            if (typeof id !== 'string' || id.trim().length === 0) return true;
+            return !existingIds.has(id);
+          });
+          skippedDuplicates += before - rows.length;
+        }
+      }
 
       const count = await importTableRows(tableName, rows, async (targetTable, payload) => {
         const { error } = await admin.from(targetTable).upsert(payload, { onConflict: 'id' });
@@ -104,6 +128,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       imported: summaries,
+      skipped_duplicates: skippedDuplicates,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Import failed';

@@ -32,6 +32,17 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let hardRedirectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const redirectToLogin = () => {
+      router.replace('/login');
+      // Fallback in case client navigation gets stuck during auth races.
+      hardRedirectTimer = setTimeout(() => {
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.assign('/login');
+        }
+      }, 180);
+    };
 
     const checkAuth = async () => {
       try {
@@ -57,7 +68,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           if (!cancelled) {
             setAuthenticated(false);
             setLoading(false);
-            router.replace('/login');
+            redirectToLogin();
           }
           return;
         }
@@ -92,7 +103,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setAuthenticated(false);
           setLoading(false);
-          router.replace('/login');
+          redirectToLogin();
         }
       }
     };
@@ -103,7 +114,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!session) {
         setAuthenticated(false);
         setLoading(false);
-        router.replace('/login');
+        redirectToLogin();
       } else {
         setAuthenticated(true);
         setLoading(false);
@@ -113,6 +124,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      if (hardRedirectTimer) clearTimeout(hardRedirectTimer);
       subscription.unsubscribe();
     };
   }, [router, pathname]);
@@ -129,7 +141,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!authenticated) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f8f9fb]">
+        <p className="text-sm text-gray-600">Preusmjeravam na login...</p>
+      </div>
+    );
   }
 
   return <>{children}</>;

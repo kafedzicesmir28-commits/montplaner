@@ -18,6 +18,10 @@ type PlannerAssignmentRow = ShiftAssignment & {
   assignment_type?: 'SHIFT' | 'FREI' | 'KRANK' | 'FERIEN';
 };
 
+type StoreWithCompanyName = Store & {
+  companies?: { name: string | null } | Array<{ name: string | null }> | null;
+};
+
 function startOfISOWeek(date: Date): Date {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const day = (d.getDay() + 6) % 7;
@@ -109,7 +113,6 @@ export default function PlannerPage() {
   const [pendingStoreByKey, setPendingStoreByKey] = useState<Record<string, string>>({});
   const [savingEmployeeOrder, setSavingEmployeeOrder] = useState(false);
   const [companyName, setCompanyName] = useState<string>('');
-  /** Unscaled content (title + grid); used to compute fit-to-page scale. */
   const printRootRef = useRef<HTMLDivElement>(null);
   const printScaleWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -187,7 +190,7 @@ export default function PlannerPage() {
       const availableHeight = pageHeightPx - 2 * marginPx;
       const content = printRootRef.current;
       const wrapper = printScaleWrapperRef.current;
-      const safety = 0.985;
+      const safety = 0.84;
       let fit = 0.85;
       if (content && wrapper) {
         const contentWidth = Math.max(content.scrollWidth, content.offsetWidth, 1);
@@ -205,9 +208,6 @@ export default function PlannerPage() {
       } else {
         setPrintScale(fit);
       }
-      window.scrollTo(0, 0);
-      document.body.style.height = 'auto';
-      document.documentElement.style.height = 'auto';
       printTimer = window.setTimeout(() => {
         if (!cancelled) window.print();
       }, 50);
@@ -230,8 +230,6 @@ export default function PlannerPage() {
     const onAfterPrint = () => {
       setPrintSelection(null);
       setPrintScale(1);
-      document.body.style.height = '';
-      document.documentElement.style.height = '';
       const wrapper = printScaleWrapperRef.current;
       if (wrapper) {
         wrapper.style.transform = '';
@@ -291,7 +289,7 @@ export default function PlannerPage() {
           .select('*')
           .order('sort_order', { ascending: true, nullsFirst: false })
           .order('name', { ascending: true }),
-        supabase.from('stores').select('id,name,color').order('name'),
+        supabase.from('stores').select('id,name,color,companies(name)').order('name'),
         supabase.from('shifts').select('*').order('start_time'),
         supabase
           .from('shift_assignments')
@@ -319,7 +317,22 @@ export default function PlannerPage() {
       if (vacationsRes.error) throw vacationsRes.error;
 
       setEmployees(employeesRes.data || []);
-      setStores(storesRes.data || []);
+      const storesWithCompany = (storesRes.data || []) as StoreWithCompanyName[];
+      setStores(storesWithCompany as Store[]);
+      if (!companyName) {
+        const firstCompany = storesWithCompany.find((s) => {
+          const ref = s.companies;
+          if (!ref) return false;
+          if (Array.isArray(ref)) return Boolean(ref[0]?.name);
+          return Boolean(ref.name);
+        })?.companies;
+        const fallbackCompanyName = Array.isArray(firstCompany)
+          ? firstCompany[0]?.name ?? ''
+          : firstCompany?.name ?? '';
+        if (fallbackCompanyName) {
+          setCompanyName(fallbackCompanyName);
+        }
+      }
       setStoresLoaded(true);
       setShifts(shiftsRes.data || []);
       setAssignments((assignmentsRes.data || []) as PlannerAssignmentRow[]);
@@ -342,7 +355,7 @@ export default function PlannerPage() {
         setLoading(false);
       }
     }
-  }, [year, month]);
+  }, [year, month, companyName]);
 
   useEffect(() => {
     fetchAllData();
@@ -588,6 +601,12 @@ export default function PlannerPage() {
             </div>
           </div>
 
+          <div className="rounded-lg border border-gray-200 bg-gradient-to-r from-gray-50 to-white px-4 py-3 shadow-sm">
+            <p className="text-center text-lg font-bold leading-tight text-gray-900 sm:text-xl md:text-2xl">
+              {companyName || 'Company'}
+            </p>
+          </div>
+
           <PlannerGrid
             employees={employees}
             days={days}
@@ -605,6 +624,7 @@ export default function PlannerPage() {
             storesLoaded={storesLoaded}
             savingEmployeeOrder={savingEmployeeOrder}
             onSwapEmployeePosition={swapEmployeePosition}
+            showBirthdays
           />
         </div>
 
@@ -672,8 +692,11 @@ export default function PlannerPage() {
         {printSelection && printDays.length > 0 ? (
           <div
             id="planner-print-area"
-            className="planner-print-area invisible pointer-events-none fixed top-0 left-[-9999px] z-[-1] w-max max-w-none overflow-visible print:visible print:pointer-events-auto print:static print:left-auto print:z-auto print:w-auto print:max-w-none"
+            className="planner-print-area invisible pointer-events-none fixed top-0 left-[-9999px] z-[-1] w-max max-w-none overflow-visible print:visible print:pointer-events-auto print:fixed print:left-0 print:top-0 print:z-[9999] print:w-full print:max-w-none"
           >
+            <div className="planner-print-company-bar hidden print:block">
+              {companyName ? `Firma: ${companyName}` : 'Firma: -'}
+            </div>
             <div
               id="print-scale-wrapper"
               ref={printScaleWrapperRef}
@@ -683,16 +706,19 @@ export default function PlannerPage() {
                 width: `${100 / Math.max(printScale, 0.01)}%`,
               }}
             >
-              <div ref={printRootRef} className="space-y-2">
-                <div className="text-center print:px-0">
+              <div ref={printRootRef} className="space-y-2 p-2">
+                <div className="planner-print-header text-center">
                   <p className="planner-print-company text-sm font-semibold text-gray-700">
                     {companyName ? `Firma: ${companyName}` : 'Firma: -'}
                   </p>
-                  <h1 className="planner-print-title text-lg font-bold leading-tight text-gray-900">
-                    {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    {' — '}
-                    {printTitleWeekLabels.join(', ')}
-                  </h1>
+                <h1 className="planner-print-title text-lg font-bold leading-tight text-gray-900">
+                  {companyName || 'Firma'}
+                </h1>
+                <p className="text-xs font-medium text-gray-600">
+                  {t.monthlyPlanner} — {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  {' — '}
+                  {printTitleWeekLabels.join(', ')}
+                </p>
                 </div>
                 <PlannerGrid
                   employees={employees}
@@ -705,6 +731,7 @@ export default function PlannerPage() {
                   printWeeklyTotals
                   readOnly
                   storesLoaded={storesLoaded}
+                  showBirthdays={false}
                 />
               </div>
             </div>
@@ -725,24 +752,38 @@ export default function PlannerPage() {
               padding: 0 !important;
             }
 
-            body * {
-              visibility: hidden !important;
-            }
-
-            #planner-print-area,
-            #planner-print-area * {
-              visibility: visible !important;
-            }
-
-            body > div.min-h-screen {
-              min-height: 0 !important;
-              background: #fff !important;
-            }
-
+            /* Print ONLY the planner print root; remove layout flow of everything else. */
+            body > div.min-h-screen,
             body > div.min-h-screen > main {
               margin: 0 !important;
               padding: 0 !important;
               max-width: none !important;
+              width: 100% !important;
+              min-height: 0 !important;
+            }
+
+            body > div.min-h-screen > nav,
+            body > div.min-h-screen > main > *:not(#planner-print-area) {
+              display: none !important;
+            }
+
+            #planner-print-area {
+              position: fixed !important;
+              top: 0 !important;
+              left: 0 !important;
+              right: 0 !important;
+              bottom: auto !important;
+              visibility: visible !important;
+              overflow: hidden !important;
+              background: #fff !important;
+              page-break-before: avoid !important;
+              page-break-after: avoid !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+
+            #planner-print-area * {
+              visibility: visible !important;
             }
 
             #planner-print-area {
@@ -762,11 +803,25 @@ export default function PlannerPage() {
             #print-scale-wrapper {
               margin: 0 !important;
               padding: 0 !important;
+              margin-top: 2.5mm !important;
               page-break-before: avoid !important;
               page-break-after: avoid !important;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
               transform-origin: top left !important;
+            }
+
+            .planner-print-company-bar {
+              display: block !important;
+              width: 100% !important;
+              text-align: center !important;
+              font-size: 13px !important;
+              font-weight: 700 !important;
+              color: #374151 !important;
+              margin: 0 0 1.5mm 0 !important;
+              line-height: 1.1 !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
             }
 
             #planner-print-area .overflow-x-auto {
@@ -787,10 +842,16 @@ export default function PlannerPage() {
             }
 
             #planner-print-area table .planner-cell-numeric,
-            #planner-print-area table .planner-header-daynum,
             #planner-print-area table .planner-pos-input-num {
               font-size: clamp(16px, 3.05mm, 23px) !important;
               line-height: 1.12 !important;
+            }
+
+            /* Date number in header (top row) - larger for PDF readability. */
+            #planner-print-area table .planner-header-daynum {
+              font-size: clamp(20px, 3.8mm, 30px) !important;
+              line-height: 1.08 !important;
+              font-weight: 800 !important;
             }
 
             /* Mitarbeiter column: avoid collapsed width + tiny inherited text; allow wrap on paper. */
@@ -816,11 +877,14 @@ export default function PlannerPage() {
 
             #planner-print-area table tbody th.planner-print-employee-name-cell a,
             #planner-print-area table tbody th.planner-print-employee-name-cell span {
-              font-size: clamp(13px, 2.7mm, 17px) !important;
-              line-height: 1.3 !important;
+              font-size: clamp(22px, 3.9mm, 28px) !important;
+              line-height: 1.06 !important;
+              font-weight: 700 !important;
               letter-spacing: 0 !important;
-              white-space: normal !important;
-              word-break: break-word !important;
+              white-space: nowrap !important;
+              word-break: normal !important;
+              text-overflow: ellipsis !important;
+              overflow: hidden !important;
             }
 
             #planner-print-area table tbody th.planner-print-employee-name-cell a {
@@ -841,8 +905,22 @@ export default function PlannerPage() {
             }
 
             .planner-print-company {
-              font-size: clamp(9px, 1.9mm, 12px) !important;
-              margin: 0 0 2px !important;
+              font-size: clamp(12px, 2.5mm, 16px) !important;
+              font-weight: 700 !important;
+              text-align: center !important;
+              margin: 0 0 4px !important;
+            }
+
+            .planner-print-header {
+              display: block !important;
+              margin-bottom: 3px !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+            }
+
+            #planner-print-area table {
+              page-break-before: avoid !important;
+              break-before: avoid !important;
             }
 
             #planner-print-area table th,
@@ -859,7 +937,7 @@ export default function PlannerPage() {
 
             @page {
               size: A4 landscape;
-              margin: 8mm;
+              margin: 6mm;
             }
           }
         `}</style>

@@ -157,6 +157,7 @@ export type PlannerCellProps = {
   onSaved: () => void | Promise<void>;
   /** Clears grid editing state after delete (avoids stuck editor on empty cell). */
   onCloseCellEdit?: () => void;
+  isBirthday?: boolean;
 };
 
 export default function PlannerCell({
@@ -185,6 +186,7 @@ export default function PlannerCell({
   onClickAssignEmpty,
   onSaved,
   onCloseCellEdit,
+  isBirthday = false,
 }: PlannerCellProps) {
   const code = shift?.code?.trim() || shift?.name?.trim() || '';
   const storeName = store?.name?.trim() || '';
@@ -594,6 +596,15 @@ export default function PlannerCell({
             : undefined,
       }}
     >
+      {isBirthday && !isEditing ? (
+        <div
+          className="pointer-events-none absolute left-1 top-1 z-10 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 shadow-sm"
+          title="Birthday"
+          aria-label="Birthday"
+        >
+          B-Day
+        </div>
+      ) : null}
       {isEditing && assignment && isAssignmentStatusOnly && !isVacation ? (
         <div className="px-0.5 py-0.5" onClick={stop} onMouseDown={stop}>
           <div

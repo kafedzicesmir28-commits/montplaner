@@ -9,8 +9,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [resetMessage, setResetMessage] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -41,30 +39,6 @@ export default function LoginPage() {
       setError(err.message || t.failedToLogin);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    setError('');
-    setResetMessage('');
-
-    if (!email.trim()) {
-      setError('Unesi email da posaljes reset link.');
-      return;
-    }
-
-    setResetLoading(true);
-    try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${origin}/auth/reset-password`,
-      });
-      if (error) throw error;
-      setResetMessage('Reset link je poslan na tvoj email.');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Neuspjesno slanje reset linka.');
-    } finally {
-      setResetLoading(false);
     }
   };
 
@@ -117,24 +91,8 @@ export default function LoginPage() {
                 className="mt-1 block w-full rounded-md border-2 border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter your password"
               />
-              <div className="mt-2 text-right">
-                <button
-                  type="button"
-                  onClick={() => void handleForgotPassword()}
-                  disabled={resetLoading}
-                  className="text-sm text-blue-700 hover:underline disabled:cursor-not-allowed disabled:text-gray-400"
-                >
-                  {resetLoading ? 'Saljem...' : 'Zab ste pass?'}
-                </button>
-              </div>
             </div>
           </div>
-
-          {resetMessage ? (
-            <p className="text-sm text-green-700" role="status">
-              {resetMessage}
-            </p>
-          ) : null}
 
           <div>
             <button
