@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { getSessionSafe, getUserSafe } from '@/lib/supabaseAuthSafe';
 
 export type AppRole = 'superadmin' | 'user';
 
@@ -25,11 +26,8 @@ function parseCompanyName(companies: ProfileQueryRow['companies']) {
 }
 
 export async function getCurrentAuthProfile(): Promise<AuthProfile | null> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) return null;
+  const user = await getUserSafe();
+  if (!user) return null;
 
   const { data, error } = await supabase
     .from('profiles')
@@ -50,8 +48,6 @@ export async function getCurrentAuthProfile(): Promise<AuthProfile | null> {
 }
 
 export async function getCurrentAccessToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const session = await getSessionSafe();
   return session?.access_token ?? null;
 }

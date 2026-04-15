@@ -84,18 +84,29 @@ export async function GET(request: NextRequest) {
       u.last_login = authUsersById.get(u.id) ?? null;
     });
 
+    let ownerLoginLogs: Array<{
+      id: string;
+      user_id: string | null;
+      email: string | null;
+      login_time: string;
+      ip: string | null;
+    }> = [];
+
     const { data: loginLogs, error: logsError } = await admin
       .from('login_logs')
       .select('id,user_id,email,login_time,ip')
       .order('login_time', { ascending: false })
       .limit(300);
-    if (logsError) throw logsError;
 
-    const ownerIds = new Set(users.filter((u) => u.role === 'user').map((u) => u.id));
-    const ownerLoginLogs = (loginLogs ?? []).filter((log) => {
-      const row = log as { user_id?: string | null };
-      return row.user_id ? ownerIds.has(row.user_id) : false;
-    });
+    // Keep admin overview available even if login_logs table
+    // is not yet migrated on this environment.
+    if (!logsError) {
+      const ownerIds = new Set(users.filter((u) => u.role === 'user').map((u) => u.id));
+      ownerLoginLogs = (loginLogs ?? []).filter((log) => {
+        const row = log as { user_id?: string | null };
+        return row.user_id ? ownerIds.has(row.user_id) : false;
+      });
+    }
 
     return NextResponse.json({
       companies: companyStats,
@@ -112,8 +123,17 @@ export async function GET(request: NextRequest) {
       login_logs: ownerLoginLogs.slice(0, 100),
     });
   } catch (error: unknown) {
+    console.error('admin overview error:', error);
     const message = error instanceof Error ? error.message : 'Failed to load admin overview';
-    const status = message === 'Forbidden' ? 403 : message.includes('token') ? 401 : 500;
+    const normalized = message.toLowerCase();
+    const status =
+      message === 'Forbidden'
+        ? 403
+        : normalized.includes('token') || normalized.includes('api key')
+          ? 401
+          : normalized.includes('missing required environment variable')
+            ? 500
+            : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

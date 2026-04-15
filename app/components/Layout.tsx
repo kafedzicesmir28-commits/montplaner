@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { getUserSafe } from '@/lib/supabaseAuthSafe';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { t } from '@/lib/translations';
@@ -20,19 +21,21 @@ export default function Layout({
 
   useEffect(() => {
     const loadRole = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-      if ((data?.role ?? 'user') === 'superadmin') {
-        setRole('superadmin');
-      } else {
-        setRole('user');
+      try {
+        const user = await getUserSafe();
+        if (!user) return;
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        if ((data?.role ?? 'user') === 'superadmin') {
+          setRole('superadmin');
+        } else {
+          setRole('user');
+        }
+      } catch {
+        // On rapid auth transitions, keep default nav until session stabilizes.
       }
     };
     void loadRole();

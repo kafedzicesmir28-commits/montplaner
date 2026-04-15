@@ -28,12 +28,6 @@ export default function LoginPage() {
       if (error) throw error;
 
       if (data.user) {
-        await supabase.from('login_logs').insert({
-          user_id: data.user.id,
-          email: data.user.email ?? email,
-          login_time: new Date().toISOString(),
-        });
-
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')

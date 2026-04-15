@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { getSessionSafe } from '@/lib/supabaseAuthSafe';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function ResetPasswordPage() {
     const bootstrap = async () => {
       // When coming from Supabase recovery mail, tokens arrive in URL hash.
       // supabase-js consumes this hash and establishes a temporary recovery session.
-      await supabase.auth.getSession();
+      await getSessionSafe();
       if (active) setReady(true);
     };
 

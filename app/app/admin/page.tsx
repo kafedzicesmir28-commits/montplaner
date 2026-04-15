@@ -63,11 +63,21 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/overview', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error ?? 'Failed to load admin overview');
+      const text = await res.text();
+      let data: unknown = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
       }
-      setOverview(data as AdminOverviewResponse);
+      if (!res.ok) {
+        const apiError =
+          typeof data === 'object' && data !== null && 'error' in data
+            ? String((data as { error?: string }).error ?? '')
+            : '';
+        throw new Error(apiError || text || 'Failed to load admin overview');
+      }
+      setOverview((data ?? {}) as AdminOverviewResponse);
     },
     []
   );

@@ -224,6 +224,8 @@ CREATE OR REPLACE FUNCTION public.current_user_company_id()
 RETURNS uuid
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT p.company_id
   FROM public.profiles p
@@ -235,6 +237,8 @@ CREATE OR REPLACE FUNCTION public.is_superadmin()
 RETURNS boolean
 LANGUAGE sql
 STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT EXISTS (
     SELECT 1
@@ -251,7 +255,8 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Not authenticated';
+    -- Allow admin/service contexts (SQL editor, migrations, service role).
+    RETURN NEW;
   END IF;
 
   IF public.is_superadmin() THEN

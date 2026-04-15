@@ -3,11 +3,19 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { getSessionSafe } from '@/lib/supabaseAuthSafe';
 import { t } from '@/lib/translations';
 
 function isInvalidRefreshTokenError(message: string | undefined): boolean {
   const text = String(message || '').toLowerCase();
   return text.includes('invalid refresh token') || text.includes('refresh token not found');
+}
+
+function isAuthLockAbortError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("lock broken by another request");
 }
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -22,48 +30,74 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
     const checkAuth = async () => {
-      if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
-        router.replace(`/auth/reset-password${window.location.hash}`);
-        return;
+      try {
+        if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+          router.replace(`/auth/reset-password${window.location.hash}`);
+          return;
+        }
+
+        let session = null;
+        let error: Error | null = null;
+        try {
+          session = await getSessionSafe();
+        } catch (authError: unknown) {
+          error = authError instanceof Error ? authError : new Error(String(authError));
+        }
+
+        if (error && isInvalidRefreshTokenError(error.message)) {
+          // Clear broken local auth state so future checks don't keep throwing.
+          await supabase.auth.signOut({ scope: 'local' });
+        }
+
+        if (!session) {
+          if (!cancelled) {
+            setAuthenticated(false);
+            setLoading(false);
+            router.replace('/login');
+          }
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        const role = (profile?.role ?? 'user') as 'superadmin' | 'user';
+
+        if (!cancelled && role === 'superadmin' && !isSuperadminAllowedPath(pathname)) {
+          setAuthenticated(true);
+          setLoading(false);
+          router.replace('/admin');
+          return;
+        }
+
+        if (!cancelled) {
+          setAuthenticated(true);
+          setLoading(false);
+        }
+      } catch (err: unknown) {
+        if (isAuthLockAbortError(err)) {
+          // Supabase auth lock collision (multiple session reads at once).
+          // Retry shortly instead of surfacing a runtime abort to the UI.
+          retryTimer = setTimeout(() => {
+            void checkAuth();
+          }, 80);
+          return;
+        }
+        if (!cancelled) {
+          setAuthenticated(false);
+          setLoading(false);
+          router.replace('/login');
+        }
       }
-
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
-      if (error && isInvalidRefreshTokenError(error.message)) {
-        // Clear broken local auth state so future checks don't keep throwing.
-        await supabase.auth.signOut({ scope: 'local' });
-      }
-
-      if (!session) {
-        setAuthenticated(false);
-        setLoading(false);
-        router.replace('/login');
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle();
-      const role = (profile?.role ?? 'user') as 'superadmin' | 'user';
-
-      if (role === 'superadmin' && !isSuperadminAllowedPath(pathname)) {
-        setAuthenticated(true);
-        setLoading(false);
-        router.replace('/admin');
-        return;
-      }
-
-      setAuthenticated(true);
-      setLoading(false);
     };
 
-    checkAuth();
+    void checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
@@ -76,7 +110,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      subscription.unsubscribe();
+    };
   }, [router, pathname]);
 
   if (loading) {
