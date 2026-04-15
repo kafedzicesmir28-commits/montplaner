@@ -57,7 +57,13 @@ export async function GET(request: NextRequest) {
       company_id: p.company_id,
       company_name: readCompanyName(p.companies),
       last_login: null as string | null,
-    }));
+    }))
+      .sort((a, b) => {
+        if (a.role !== b.role) {
+          return a.role === 'user' ? -1 : 1;
+        }
+        return String(a.email ?? '').localeCompare(String(b.email ?? ''));
+      });
 
     let page = 1;
     const pageSize = 200;
@@ -82,8 +88,14 @@ export async function GET(request: NextRequest) {
       .from('login_logs')
       .select('id,user_id,email,login_time,ip')
       .order('login_time', { ascending: false })
-      .limit(100);
+      .limit(300);
     if (logsError) throw logsError;
+
+    const ownerIds = new Set(users.filter((u) => u.role === 'user').map((u) => u.id));
+    const ownerLoginLogs = (loginLogs ?? []).filter((log) => {
+      const row = log as { user_id?: string | null };
+      return row.user_id ? ownerIds.has(row.user_id) : false;
+    });
 
     return NextResponse.json({
       companies: companyStats,
@@ -97,7 +109,7 @@ export async function GET(request: NextRequest) {
           employees: c.employees_count,
         })),
       },
-      login_logs: loginLogs ?? [],
+      login_logs: ownerLoginLogs.slice(0, 100),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to load admin overview';

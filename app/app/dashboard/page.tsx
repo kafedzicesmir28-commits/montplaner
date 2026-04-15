@@ -1,3 +1,6 @@
+ 'use client';
+
+import { useEffect } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Layout from '@/components/Layout';
 import {
@@ -13,6 +16,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { t } from '@/lib/translations';
+import { useRouter } from 'next/navigation';
+import { getCurrentAuthProfile } from '@/lib/authProfile';
 
 type DashboardCard = {
   href: string;
@@ -112,6 +117,18 @@ const secondaryCards: DashboardCard[] = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const enforceSuperadminRedirect = async () => {
+      const profile = await getCurrentAuthProfile();
+      if (profile?.role === 'superadmin') {
+        router.replace('/admin');
+      }
+    };
+    void enforceSuperadminRedirect();
+  }, [router]);
+
   return (
     <AuthGuard>
       <Layout>

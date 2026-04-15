@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
@@ -15,6 +16,27 @@ export default function Layout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [role, setRole] = useState<'superadmin' | 'user'>('user');
+
+  useEffect(() => {
+    const loadRole = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+      if ((data?.role ?? 'user') === 'superadmin') {
+        setRole('superadmin');
+      } else {
+        setRole('user');
+      }
+    };
+    void loadRole();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -22,7 +44,7 @@ export default function Layout({
     router.refresh();
   };
 
-  const navItems = [
+  const userNavItems = [
     { href: '/dashboard', label: t.dashboard },
     { href: '/employees', label: t.employees },
     { href: '/stores', label: t.stores },
@@ -33,12 +55,19 @@ export default function Layout({
     { href: '/accountant', label: t.accountantView },
   ];
 
-  const reportItems = [
+  const superadminNavItems = [{ href: '/admin', label: 'Admin' }];
+
+  const reportItems = role === 'superadmin' ? [] : [
     { href: '/reports', label: t.reportsHub },
     { href: '/reports/stores', label: t.reportsStoreOverviewShort },
     { href: '/reports/employee-monthly', label: t.reportsEmployeeMonthlyShort },
     { href: '/reports/employee-vacations', label: t.reportsEmployeeVacationsShort },
   ];
+
+  const navItems = useMemo(
+    () => (role === 'superadmin' ? superadminNavItems : userNavItems),
+    [role]
+  );
 
   const allNavHrefs = [...navItems, ...reportItems].map((i) => i.href);
 

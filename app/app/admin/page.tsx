@@ -54,6 +54,7 @@ export default function AdminPage() {
   const [actionMessage, setActionMessage] = useState('');
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [settingPasswordFor, setSettingPasswordFor] = useState<string | null>(null);
 
   const companyOptions = useMemo(() => overview?.companies ?? [], [overview]);
 
@@ -111,8 +112,9 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Failed to create company');
+      setNewUserCompanyId(data?.company?.id ?? '');
       setNewCompanyName('');
-      setActionMessage('Company created.');
+      setActionMessage('Company created. You can now add the first user for this company.');
       await loadOverview(token);
     } catch (e: unknown) {
       setActionMessage(e instanceof Error ? e.message : 'Failed to create company');
@@ -152,6 +154,31 @@ export default function AdminPage() {
       setActionMessage(e instanceof Error ? e.message : 'Failed to create user');
     } finally {
       setCreatingUser(false);
+    }
+  };
+
+  const setTemporaryPassword = async (userId: string, email: string | null) => {
+    if (!token) return;
+    const tempPassword = window.prompt(`Privremena sifra za ${email ?? userId}:`, '');
+    if (!tempPassword) return;
+    setSettingPasswordFor(userId);
+    setActionMessage('');
+    try {
+      const res = await fetch('/api/admin/users/password', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ user_id: userId, password: tempPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? 'Failed to set temporary password');
+      setActionMessage(`Temporary password updated for ${email ?? userId}.`);
+    } catch (e: unknown) {
+      setActionMessage(e instanceof Error ? e.message : 'Failed to set temporary password');
+    } finally {
+      setSettingPasswordFor(null);
     }
   };
 
@@ -374,7 +401,7 @@ export default function AdminPage() {
               </section>
 
               <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900">Users</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Owners and users</h2>
                 <div className="mt-3 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead>
@@ -383,6 +410,7 @@ export default function AdminPage() {
                         <th className="px-2 py-2">Company</th>
                         <th className="px-2 py-2">Role</th>
                         <th className="px-2 py-2">Last login</th>
+                        <th className="px-2 py-2">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -392,6 +420,20 @@ export default function AdminPage() {
                           <td className="px-2 py-2">{user.company_name ?? '-'}</td>
                           <td className="px-2 py-2">{user.role}</td>
                           <td className="px-2 py-2">{formatDateTime(user.last_login)}</td>
+                          <td className="px-2 py-2">
+                            {user.role === 'user' ? (
+                              <button
+                                type="button"
+                                onClick={() => void setTemporaryPassword(user.id, user.email)}
+                                disabled={settingPasswordFor === user.id}
+                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                              >
+                                {settingPasswordFor === user.id ? 'Saving...' : 'Set temporary password'}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-500">-</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -400,7 +442,7 @@ export default function AdminPage() {
               </section>
 
               <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900">Login logs</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Owner login logs</h2>
                 <div className="mt-3 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead>

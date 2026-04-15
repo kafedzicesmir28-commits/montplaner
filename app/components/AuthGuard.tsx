@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { t } from '@/lib/translations';
 
@@ -14,9 +14,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+
+  const isSuperadminAllowedPath = (path: string | null) => {
+    if (!path) return false;
+    return path === '/admin' || path.startsWith('/admin/');
+  };
 
   useEffect(() => {
     const checkAuth = async () => {
+      if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+        router.replace(`/auth/reset-password${window.location.hash}`);
+        return;
+      }
+
       const {
         data: { session },
         error,
@@ -31,6 +42,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         setAuthenticated(false);
         setLoading(false);
         router.replace('/login');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      const role = (profile?.role ?? 'user') as 'superadmin' | 'user';
+
+      if (role === 'superadmin' && !isSuperadminAllowedPath(pathname)) {
+        setAuthenticated(true);
+        setLoading(false);
+        router.replace('/admin');
         return;
       }
 
@@ -52,7 +77,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [router]);
+  }, [router, pathname]);
 
   if (loading) {
     return (
