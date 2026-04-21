@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Parser } from 'json2csv';
 import JSZip from 'jszip';
-import {
-  BACKUP_CSV_FILENAMES,
-  BACKUP_FALLBACK_FIELDS,
-  BACKUP_TABLES,
-  type BackupTableName,
-} from '@/lib/backupTables';
+import { BACKUP_TABLES, type BackupTableName } from '@/lib/backupTables';
 import { requireSuperadmin } from '@/lib/serverSuperadmin';
 
 type JsonRow = Record<string, unknown>;
+type BackupPayload = {
+  version: 2;
+  format: 'json';
+  exported_at: string;
+  tables: Record<BackupTableName, JsonRow[]>;
+};
 
 async function fetchAllRows(
   tableName: BackupTableName,
@@ -46,14 +46,23 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    const tables = tableData.reduce(
+      (acc, item) => {
+        acc[item.table] = item.rows;
+        return acc;
+      },
+      {} as Record<BackupTableName, JsonRow[]>
+    );
+
+    const payload: BackupPayload = {
+      version: 2,
+      format: 'json',
+      exported_at: new Date().toISOString(),
+      tables,
+    };
+
     const zip = new JSZip();
-    tableData.forEach(({ table, rows }) => {
-      const fields = rows.length
-        ? Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
-        : BACKUP_FALLBACK_FIELDS[table];
-      const parser = new Parser<JsonRow>({ fields });
-      zip.file(BACKUP_CSV_FILENAMES[table], parser.parse(rows));
-    });
+    zip.file('backup.json', JSON.stringify(payload, null, 2));
 
     const stamp = new Date().toISOString().replace(/:/g, '-').slice(0, 16);
     const zipFilename = `backup-${stamp}.zip`;

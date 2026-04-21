@@ -9,6 +9,7 @@ import {
   CalendarClock,
   CalendarDays,
   DollarSign,
+  FileSpreadsheet,
   Store,
   Umbrella,
   Users,
@@ -114,6 +115,16 @@ const secondaryCards: DashboardCard[] = [
     iconColor: 'text-slate-800',
     iconBg: 'bg-slate-100',
   },
+  {
+    href: '/dashboard/jahresuebersicht',
+    title: 'Jahresubersicht',
+    description: 'Jahresansicht je Mitarbeiter fur Payroll-Ubersicht.',
+    accent: 'from-yellow-50 to-yellow-100/80 border-yellow-200',
+    dot: 'bg-yellow-500',
+    icon: FileSpreadsheet,
+    iconColor: 'text-yellow-700',
+    iconBg: 'bg-yellow-100',
+  },
 ];
 
 export default function DashboardPage() {
@@ -168,7 +179,7 @@ export default function DashboardPage() {
             <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
               {t.dashboardSecondarySection}
             </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {secondaryCards.map((card) => (
                 <Link
                   key={card.href}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperadmin } from '@/lib/serverSuperadmin';
+import { getRequestIp, writeAuditEvent } from '@/lib/auditLog';
 
 type CreateUserBody = {
   email?: string;
@@ -10,7 +11,7 @@ type CreateUserBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { admin } = await requireSuperadmin(request);
+    const { admin, userId: actorUserId, email: actorEmail } = await requireSuperadmin(request);
     const body = (await request.json()) as CreateUserBody;
 
     const email = (body.email ?? '').trim().toLowerCase();
@@ -43,6 +44,23 @@ export async function POST(request: NextRequest) {
       company_id: role === 'superadmin' ? null : companyId,
     });
     if (profileError) throw profileError;
+
+    await writeAuditEvent(admin, {
+      action: 'user_created',
+      actor_user_id: actorUserId,
+      actor_email: actorEmail,
+      target_user_id: userId,
+      company_id: role === 'superadmin' ? null : companyId,
+      target_type: 'user',
+      target_id: userId,
+      target_email: email,
+      metadata: {
+        role,
+        company_id: role === 'superadmin' ? null : companyId,
+      },
+      ip: getRequestIp(request),
+      user_agent: request.headers.get('user-agent'),
+    });
 
     return NextResponse.json({
       user: {

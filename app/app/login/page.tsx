@@ -26,6 +26,15 @@ export default function LoginPage() {
       if (error) throw error;
 
       if (data.user) {
+        if (data.session?.access_token) {
+          void fetch('/api/audit/login', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${data.session.access_token}`,
+            },
+          });
+        }
+
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')

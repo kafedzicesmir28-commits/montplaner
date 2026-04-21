@@ -1,5 +1,7 @@
 -- MINIMAL SETUP - Copy this entire file to Supabase SQL Editor and run it
 -- This creates all required tables for the Employee Shift Planner
+-- WARNING: Legacy/minimal path only. Not canonical for multi-tenant + superadmin hardening.
+-- Use app/supabase/migration-multi-tenant-superadmin.sql (see CANONICAL_SETUP.md).
 
 -- Step 1: Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

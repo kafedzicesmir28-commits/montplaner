@@ -219,6 +219,28 @@ CREATE TABLE IF NOT EXISTS public.login_logs (
 CREATE INDEX IF NOT EXISTS login_logs_user_id_idx ON public.login_logs (user_id);
 CREATE INDEX IF NOT EXISTS login_logs_login_time_idx ON public.login_logs (login_time DESC);
 
+-- 7b) Audit logs for superadmin observability.
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  action text NOT NULL,
+  actor_user_id uuid REFERENCES auth.users (id) ON DELETE SET NULL,
+  actor_email text,
+  target_user_id uuid REFERENCES auth.users (id) ON DELETE SET NULL,
+  company_id uuid REFERENCES public.companies (id) ON DELETE SET NULL,
+  target_type text,
+  target_id text,
+  target_email text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ip text,
+  user_agent text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON public.audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON public.audit_logs (action);
+CREATE INDEX IF NOT EXISTS audit_logs_actor_user_id_idx ON public.audit_logs (actor_user_id);
+CREATE INDEX IF NOT EXISTS audit_logs_company_id_idx ON public.audit_logs (company_id);
+
 -- 8) RLS helpers and strict policies.
 CREATE OR REPLACE FUNCTION public.current_user_company_id()
 RETURNS uuid
@@ -350,6 +372,7 @@ ALTER TABLE public.vacations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.login_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow all for authenticated users" ON public.employees;
 DROP POLICY IF EXISTS "Allow all for authenticated users" ON public.shifts;
@@ -529,6 +552,21 @@ USING (
 
 DROP POLICY IF EXISTS login_logs_delete_superadmin_only ON public.login_logs;
 CREATE POLICY login_logs_delete_superadmin_only ON public.login_logs
+FOR DELETE
+USING (auth.uid() IS NOT NULL AND public.is_superadmin());
+
+DROP POLICY IF EXISTS audit_logs_insert_authenticated ON public.audit_logs;
+CREATE POLICY audit_logs_insert_authenticated ON public.audit_logs
+FOR INSERT
+WITH CHECK (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS audit_logs_read_superadmin_only ON public.audit_logs;
+CREATE POLICY audit_logs_read_superadmin_only ON public.audit_logs
+FOR SELECT
+USING (auth.uid() IS NOT NULL AND public.is_superadmin());
+
+DROP POLICY IF EXISTS audit_logs_delete_superadmin_only ON public.audit_logs;
+CREATE POLICY audit_logs_delete_superadmin_only ON public.audit_logs
 FOR DELETE
 USING (auth.uid() IS NOT NULL AND public.is_superadmin());
 

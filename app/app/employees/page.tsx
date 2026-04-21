@@ -44,20 +44,22 @@ export default function EmployeesPage() {
           'Please set up your database:\n' +
           '1. Go to your Supabase project\n' +
           '2. Open SQL Editor\n' +
-          '3. Copy and run the SQL from: app/supabase/schema.sql\n\n' +
+          '3. Follow app/supabase/CANONICAL_SETUP.md and run app/supabase/migration-multi-tenant-superadmin.sql\n\n' +
           'Or visit /setup-check for detailed instructions.'
         );
       } else if (error.message?.includes('sort_order') || error.message?.includes('employment_start_date')) {
         alert(
           'Employees schema is outdated.\n\n' +
-          'Please run: app/supabase/migration-employees-phase2.sql\n' +
-          'in Supabase SQL Editor to add new employee fields.'
+          'Please run the canonical migration path:\n' +
+          'app/supabase/migration-multi-tenant-superadmin.sql\n' +
+          '(see app/supabase/CANONICAL_SETUP.md).'
         );
       } else if (error.message?.includes('hourly_rate')) {
         alert(
           'Employees table is missing hourly_rate.\n\n' +
-          'Please run: app/supabase/migration-employees-hourly-rate.sql\n' +
-          'in Supabase SQL Editor.'
+          'Please run the canonical migration path:\n' +
+          'app/supabase/migration-multi-tenant-superadmin.sql\n' +
+          '(see app/supabase/CANONICAL_SETUP.md).'
         );
       }
     } finally {

@@ -8,7 +8,7 @@ STEP 2: Click "SQL Editor" in the left sidebar
 
 STEP 3: Click "New query" button
 
-STEP 4: Copy the ENTIRE contents of the file "schema.sql" (in this same folder)
+STEP 4: Open "CANONICAL_SETUP.md" (in this same folder) and follow it
 
 STEP 5: Paste into the SQL Editor
 
@@ -18,7 +18,7 @@ STEP 7: You should see "Success. No rows returned" message
 
 STEP 8: Verify tables exist:
    - Click "Table Editor" in left sidebar
-   - You should see 5 tables: employees, stores, shifts, shift_assignments, vacations
+   - You should see at least: employees, stores, shifts, shift_assignments, vacations, companies, profiles, login_logs
 
 STEP 9: Create an admin user:
    - Click "Authentication" → "Users"

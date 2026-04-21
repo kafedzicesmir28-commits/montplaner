@@ -1,6 +1,8 @@
 -- ============================================================================
 -- Sync database with current project schema (NO data removal)
 -- ============================================================================
+-- WARNING: Legacy sync helper only. Not canonical for multi-tenant + superadmin hardening.
+-- Use app/supabase/migration-multi-tenant-superadmin.sql (see CANONICAL_SETUP.md).
 -- Safe to re-run in Supabase SQL Editor. Uses IF NOT EXISTS / IF EXISTS /
 -- ADD COLUMN IF NOT EXISTS / DROP POLICY IF EXISTS + CREATE POLICY.
 --

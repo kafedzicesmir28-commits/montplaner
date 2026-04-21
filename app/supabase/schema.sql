@@ -1,5 +1,7 @@
 -- Employee Shift Planning Database Schema
 -- Run this SQL in your Supabase SQL Editor
+-- WARNING: Not the canonical path for multi-tenant + superadmin hardening.
+-- Use app/supabase/migration-multi-tenant-superadmin.sql (see CANONICAL_SETUP.md).
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

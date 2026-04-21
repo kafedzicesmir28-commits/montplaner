@@ -4,7 +4,7 @@ You're seeing this error because the database tables haven't been created yet in
 
 ## Quick Fix (5 minutes)
 
-### Option 1: Using Supabase Web Interface (Recommended)
+### Option 1: Canonical secure setup (Recommended)
 
 1. **Open Supabase Dashboard**
    - Go to [https://supabase.com](https://supabase.com)
@@ -14,24 +14,28 @@ You're seeing this error because the database tables haven't been created yet in
    - Click **"SQL Editor"** in the left sidebar
    - Click **"New query"** button
 
-3. **Copy the Schema**
-   - Open the file: `app/supabase/schema.sql`
+3. **Use the Canonical Guide**
+   - Open the file: `app/supabase/CANONICAL_SETUP.md`
    - Select ALL (Ctrl+A / Cmd+A)
    - Copy (Ctrl+C / Cmd+C)
 
 4. **Paste and Run**
    - Paste into the Supabase SQL Editor
+   - Run `app/supabase/migration-multi-tenant-superadmin.sql`
    - Click **"Run"** button (or press Ctrl+Enter / Cmd+Enter)
    - Wait for "Success" message
 
 5. **Verify Tables**
    - Click **"Table Editor"** in left sidebar
-   - You should see 5 tables:
+   - You should see at least these core tables:
      - ✅ employees
      - ✅ stores
      - ✅ shifts
      - ✅ shift_assignments
      - ✅ vacations
+     - ✅ companies
+     - ✅ profiles
+     - ✅ login_logs
 
 6. **Create Admin User**
    - Click **"Authentication"** → **"Users"**
@@ -55,19 +59,19 @@ supabase db push
 
 But you'll need to set up the migration files first.
 
-## What the Schema Creates
+## What the Canonical Migration Creates
 
 The SQL schema creates:
 
-- **5 Tables**: employees, stores, shifts, shift_assignments, vacations
-- **4 Indexes**: For better query performance
-- **5 RLS Policies**: Security policies for authenticated users
+- **Tenant-aware tables**: including companies/profiles and company ownership columns
+- **Strict RLS policies**: per-tenant isolation and superadmin-only management actions
+- **Security helpers/triggers**: profile mutation guard and tenant company auto-assignment
 
 ## Troubleshooting
 
 ### "Policy already exists" error
-- This is OK! The script includes `DROP POLICY IF EXISTS` statements
-- You can safely re-run the entire script
+- This is OK! The canonical migration uses idempotent policy updates
+- You can safely re-run `app/supabase/migration-multi-tenant-superadmin.sql`
 
 ### "Extension already exists" error
 - This is OK! The `CREATE EXTENSION IF NOT EXISTS` handles this
@@ -82,7 +86,7 @@ The SQL schema creates:
 ### Can't log in after setup
 1. Verify user exists in Authentication → Users
 2. Make sure "Auto Confirm User" was checked
-3. Check that RLS policies were created (should see 5 policies)
+3. Check that strict policies exist (for tenant tables and superadmin controls)
 
 ## Need More Help?
 

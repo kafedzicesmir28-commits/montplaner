@@ -38,9 +38,9 @@ npm install
 
 1. Create a new project at [supabase.com](https://supabase.com)
 2. Go to your project's SQL Editor
-3. Copy and run the SQL schema from `supabase/schema.sql`
-4. Go to Project Settings > API
-5. Copy your Project URL and anon/public key
+3. Follow the canonical setup guide in `supabase/CANONICAL_SETUP.md`
+4. Run `supabase/migration-multi-tenant-superadmin.sql`
+5. Go to Project Settings > API and copy your Project URL and anon/public key
 
 ### 3. Configure Environment Variables
 
@@ -92,7 +92,8 @@ app/
 ├── types/
 │   └── database.ts        # TypeScript types for database entities
 └── supabase/
-    └── schema.sql         # Database schema SQL
+    ├── CANONICAL_SETUP.md                  # Canonical DB setup path
+    └── migration-multi-tenant-superadmin.sql  # Canonical migration
 
 ```
 

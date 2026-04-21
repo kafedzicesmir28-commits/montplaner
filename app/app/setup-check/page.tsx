@@ -37,7 +37,7 @@ export default function SetupCheckPage() {
     }
 
     // Check each table
-    const requiredTables = ['employees', 'stores', 'shifts', 'shift_assignments', 'vacations'];
+    const requiredTables = ['employees', 'stores', 'shifts', 'shift_assignments', 'vacations', 'companies', 'profiles', 'login_logs'];
     const tableChecks: TableStatus[] = [];
 
     for (const tableName of requiredTables) {
@@ -171,14 +171,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key`}
                   2. Create Database Tables
                 </h3>
                 <p className="text-yellow-700 mb-2">
-                  You need to run the SQL schema in your Supabase project:
+                  You need to run the canonical secure migration in your Supabase project:
                 </p>
                 <ol className="list-decimal list-inside text-yellow-700 space-y-1 text-sm">
                   <li>Go to your Supabase project dashboard</li>
                   <li>Click on <strong>"SQL Editor"</strong> in the left sidebar</li>
                   <li>Click <strong>"New query"</strong></li>
-                  <li>Open the file <code className="bg-yellow-100 px-1 rounded">app/supabase/schema.sql</code></li>
-                  <li>Copy the entire contents and paste into the SQL Editor</li>
+                  <li>Open <code className="bg-yellow-100 px-1 rounded">app/supabase/CANONICAL_SETUP.md</code></li>
+                  <li>Run <code className="bg-yellow-100 px-1 rounded">app/supabase/migration-multi-tenant-superadmin.sql</code> in the SQL Editor</li>
                   <li>Click <strong>"Run"</strong> (or press Ctrl+Enter)</li>
                 </ol>
                 <p className="text-yellow-700 mt-2 text-sm">

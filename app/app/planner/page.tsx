@@ -91,7 +91,7 @@ function formatWeekId(weekYear: number, weekNumber: number): string {
   return `${weekYear}-W${String(weekNumber).padStart(2, '0')}`;
 }
 
-type PlannerPrintWeekCount = 1 | 2 | 3;
+type PlannerPrintWeekCount = 1 | 2 | 3 | 4 | 5;
 
 export default function PlannerPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -278,8 +278,8 @@ export default function PlannerPage() {
       const planWeekYear = getISOWeekYear(anchorDate);
       const plannerRangeStart = startOfISOWeekFromYearWeek(planWeekYear, 1);
       const plannerLastWeekStart = startOfISOWeekFromYearWeek(planWeekYear, getISOWeeksInYear(planWeekYear));
-      // Buffer after ISO year end so multi-week prints near year boundary still load shifts.
-      const plannerRangeEnd = addDays(plannerLastWeekStart, 6 + 21);
+      // Buffer after ISO year end so up to 5-week prints near year boundary still load shifts.
+      const plannerRangeEnd = addDays(plannerLastWeekStart, 6 + 35);
       const rangeStartStr = formatDate(plannerRangeStart);
       const rangeEndStr = formatDate(plannerRangeEnd);
 
@@ -639,7 +639,7 @@ export default function PlannerPage() {
                 <fieldset>
                   <legend className="text-sm font-medium text-gray-700">Number of weeks</legend>
                   <div className="mt-2 flex flex-wrap gap-3">
-                    {([1, 2, 3] as const).map((n) => (
+                    {([1, 2, 3, 4, 5] as const).map((n) => (
                       <label key={n} className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-800">
                         <input
                           type="radio"

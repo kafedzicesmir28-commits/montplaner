@@ -10,6 +10,20 @@ type ProfileRow = {
   company_id: string | null;
   companies: { name: string | null } | Array<{ name: string | null }> | null;
 };
+type AuditLogRow = {
+  id: string;
+  action: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  target_email: string | null;
+  company_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
 
 function readCompanyName(companies: ProfileRow['companies']) {
   if (!companies) return null;
@@ -108,12 +122,41 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    let auditLogs: AuditLogRow[] = [];
+    const { data: auditData, error: auditError } = await admin
+      .from('audit_logs')
+      .select(
+        'id,action,actor_user_id,actor_email,target_type,target_id,target_email,company_id,ip,user_agent,metadata,created_at'
+      )
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (!auditError) {
+      auditLogs = (auditData ?? []) as AuditLogRow[];
+    }
+
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const events24h = auditLogs.filter((event) => {
+      const ts = new Date(event.created_at).getTime();
+      return !Number.isNaN(ts) && ts >= oneDayAgo;
+    });
+    const eventsByAction24h = Object.entries(
+      events24h.reduce<Record<string, number>>((acc, row) => {
+        acc[row.action] = (acc[row.action] ?? 0) + 1;
+        return acc;
+      }, {})
+    )
+      .map(([action, count]) => ({ action, count }))
+      .sort((a, b) => b.count - a.count);
+
     return NextResponse.json({
       companies: companyStats,
       users,
       stats: {
         total_companies: companyStats.length,
         total_users: users.length,
+        audit_events_24h: events24h.length,
+        events_by_action_24h: eventsByAction24h,
         employees_per_company: companyStats.map((c) => ({
           company_id: c.id,
           company_name: c.name,
@@ -121,6 +164,7 @@ export async function GET(request: NextRequest) {
         })),
       },
       login_logs: ownerLoginLogs.slice(0, 100),
+      audit_logs: auditLogs.slice(0, 150),
     });
   } catch (error: unknown) {
     console.error('admin overview error:', error);

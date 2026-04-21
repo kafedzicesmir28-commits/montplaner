@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperadmin } from '@/lib/serverSuperadmin';
+import { getRequestIp, writeAuditEvent } from '@/lib/auditLog';
 
 type SetPasswordBody = {
   user_id?: string;
@@ -8,7 +9,7 @@ type SetPasswordBody = {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { admin } = await requireSuperadmin(request);
+    const { admin, userId: actorUserId, email: actorEmail } = await requireSuperadmin(request);
     const body = (await request.json()) as SetPasswordBody;
     const userId = (body.user_id ?? '').trim();
     const password = body.password ?? '';
@@ -22,6 +23,18 @@ export async function PATCH(request: NextRequest) {
 
     const { error } = await admin.auth.admin.updateUserById(userId, { password });
     if (error) throw error;
+
+    await writeAuditEvent(admin, {
+      action: 'user_password_reset',
+      actor_user_id: actorUserId,
+      actor_email: actorEmail,
+      target_user_id: userId,
+      target_type: 'user',
+      target_id: userId,
+      metadata: { password_length: password.length },
+      ip: getRequestIp(request),
+      user_agent: request.headers.get('user-agent'),
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {

@@ -17,14 +17,13 @@ The error you're seeing (`Could not find the table 'public.employees'`) means th
 1. In your Supabase project dashboard, click on **"SQL Editor"** in the left sidebar
 2. Click **"New query"** button
 
-### 3. Copy and Run the Schema
+### 3. Run the Canonical Migration Path
 
-1. Open the file `app/supabase/schema.sql` in your project
-2. **Copy the entire contents** of that file
-3. **Paste it into the SQL Editor** in Supabase
-4. Click **"Run"** (or press Ctrl+Enter / Cmd+Enter)
+1. Open `app/supabase/CANONICAL_SETUP.md`
+2. Run `app/supabase/migration-multi-tenant-superadmin.sql` in Supabase SQL Editor
+3. Run the verification queries from the canonical guide
 
-You should see a success message indicating all tables, indexes, and policies were created.
+You should see a success message and strict tenant-isolation policies after verification.
 
 ### 4. Verify Tables Were Created
 
@@ -36,7 +35,7 @@ You should see a success message indicating all tables, indexes, and policies we
    - `shift_assignments`
    - `vacations`
 
-If you see all 5 tables, the schema was applied successfully!
+If you see the expected tables (including `companies`, `profiles`, and `login_logs`), setup was applied successfully.
 
 ### 5. Create an Admin User
 
@@ -70,7 +69,7 @@ If you see all 5 tables, the schema was applied successfully!
 
 ### If you get "policy already exists" errors
 
-The schema includes `DROP POLICY IF EXISTS` statements, so you can safely re-run the entire SQL script.
+The migration includes `DROP POLICY IF EXISTS` in critical sections, so you can safely re-run the canonical migration.
 
 ### If tables still don't appear
 

@@ -1,4 +1,5 @@
 export type BackupTableName =
+  | 'companies'
   | 'employees'
   | 'shifts'
   | 'stores'
@@ -6,14 +7,16 @@ export type BackupTableName =
   | 'vacations';
 
 export const BACKUP_TABLES: BackupTableName[] = [
+  'companies',
+  'stores',
   'employees',
   'shifts',
-  'stores',
   'shift_assignments',
   'vacations',
 ];
 
 export const BACKUP_CSV_FILENAMES: Record<BackupTableName, string> = {
+  companies: 'companies.csv',
   employees: 'employees.csv',
   shifts: 'shifts.csv',
   stores: 'stores.csv',
@@ -22,6 +25,7 @@ export const BACKUP_CSV_FILENAMES: Record<BackupTableName, string> = {
 };
 
 export const BACKUP_FALLBACK_FIELDS: Record<BackupTableName, string[]> = {
+  companies: ['id', 'name', 'created_at'],
   employees: [
     'id',
     'name',

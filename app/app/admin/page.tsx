@@ -19,6 +19,8 @@ type AdminOverviewResponse = {
   stats: {
     total_companies: number;
     total_users: number;
+    audit_events_24h: number;
+    events_by_action_24h: Array<{ action: string; count: number }>;
     employees_per_company: Array<{ company_id: string; company_name: string; employees: number }>;
   };
   login_logs: Array<{
@@ -26,6 +28,15 @@ type AdminOverviewResponse = {
     user_id: string | null;
     email: string | null;
     login_time: string;
+    ip: string | null;
+  }>;
+  audit_logs: Array<{
+    id: string;
+    action: string;
+    actor_email: string | null;
+    target_type: string | null;
+    target_email: string | null;
+    created_at: string;
     ip: string | null;
   }>;
 };
@@ -287,6 +298,28 @@ export default function AdminPage() {
                   </p>
                 </div>
               </section>
+              <section className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <p className="text-sm text-gray-500">Audit events (24h)</p>
+                  <p className="mt-2 text-2xl font-semibold">{overview.stats.audit_events_24h}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm md:col-span-2">
+                  <p className="text-sm text-gray-500">Top events (24h)</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(overview.stats.events_by_action_24h ?? []).slice(0, 6).map((row) => (
+                      <span
+                        key={row.action}
+                        className="rounded-full border border-gray-300 bg-gray-50 px-2.5 py-1 text-xs text-gray-700"
+                      >
+                        {row.action}: {row.count}
+                      </span>
+                    ))}
+                    {(overview.stats.events_by_action_24h ?? []).length === 0 ? (
+                      <span className="text-sm text-gray-500">No audit events in last 24h.</span>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
 
               <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-semibold text-gray-900">Global export/import</h2>
@@ -326,8 +359,9 @@ export default function AdminPage() {
                   </label>
                 </div>
                 <p className="mt-2 text-xs text-gray-500">
-                  Import expects the exported backup ZIP. If <span className="font-semibold">Skip duplicates</span> is enabled,
-                  rows with existing IDs are ignored instead of imported again.
+                  Import expects the exported backup ZIP. New exports use a JSON backup format for safer type-preserving restore.
+                  If <span className="font-semibold">Skip duplicates</span> is enabled, duplicate planner entries for the same employee/day
+                  are skipped.
                 </p>
                 {actionMessage ? <p className="mt-3 text-sm text-gray-700">{actionMessage}</p> : null}
               </section>
@@ -489,6 +523,37 @@ export default function AdminPage() {
                         <tr key={log.id} className="border-t border-gray-100">
                           <td className="px-2 py-2">{log.email ?? '-'}</td>
                           <td className="px-2 py-2">{formatDateTime(log.login_time)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-gray-900">Recent audit events</h2>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500">
+                        <th className="px-2 py-2">Action</th>
+                        <th className="px-2 py-2">Actor</th>
+                        <th className="px-2 py-2">Target</th>
+                        <th className="px-2 py-2">IP</th>
+                        <th className="px-2 py-2">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {overview.audit_logs.map((event) => (
+                        <tr key={event.id} className="border-t border-gray-100">
+                          <td className="px-2 py-2">{event.action}</td>
+                          <td className="px-2 py-2">{event.actor_email ?? '-'}</td>
+                          <td className="px-2 py-2">
+                            {event.target_type ? `${event.target_type}: ` : ''}
+                            {event.target_email ?? '-'}
+                          </td>
+                          <td className="px-2 py-2">{event.ip ?? '-'}</td>
+                          <td className="px-2 py-2">{formatDateTime(event.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>
