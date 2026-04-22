@@ -241,6 +241,40 @@ CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON public.audit_logs (action);
 CREATE INDEX IF NOT EXISTS audit_logs_actor_user_id_idx ON public.audit_logs (actor_user_id);
 CREATE INDEX IF NOT EXISTS audit_logs_company_id_idx ON public.audit_logs (company_id);
 
+-- 7c) Support tickets (company scoped) + messages.
+CREATE TABLE IF NOT EXISTS public.support_tickets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES public.companies (id) ON DELETE CASCADE,
+  created_by uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  subject text NOT NULL,
+  request_type text NOT NULL DEFAULT 'general',
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+  priority text NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  closed_at timestamptz,
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '24 hours'),
+  last_superadmin_reply_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS public.support_ticket_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id uuid NOT NULL REFERENCES public.support_tickets (id) ON DELETE CASCADE,
+  author_user_id uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  author_role_snapshot text NOT NULL DEFAULT 'user',
+  message text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS support_tickets_company_status_created_idx
+  ON public.support_tickets (company_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS support_tickets_expires_at_idx
+  ON public.support_tickets (expires_at);
+CREATE INDEX IF NOT EXISTS support_tickets_created_by_idx
+  ON public.support_tickets (created_by);
+CREATE INDEX IF NOT EXISTS support_ticket_messages_ticket_created_idx
+  ON public.support_ticket_messages (ticket_id, created_at);
+
 -- 8) RLS helpers and strict policies.
 CREATE OR REPLACE FUNCTION public.current_user_company_id()
 RETURNS uuid
@@ -373,6 +407,8 @@ ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.login_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_ticket_messages ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow all for authenticated users" ON public.employees;
 DROP POLICY IF EXISTS "Allow all for authenticated users" ON public.shifts;
@@ -569,6 +605,89 @@ DROP POLICY IF EXISTS audit_logs_delete_superadmin_only ON public.audit_logs;
 CREATE POLICY audit_logs_delete_superadmin_only ON public.audit_logs
 FOR DELETE
 USING (auth.uid() IS NOT NULL AND public.is_superadmin());
+
+DROP POLICY IF EXISTS support_tickets_select_company_or_superadmin ON public.support_tickets;
+CREATE POLICY support_tickets_select_company_or_superadmin ON public.support_tickets
+FOR SELECT
+USING (
+  auth.uid() IS NOT NULL
+  AND (
+    public.is_superadmin()
+    OR company_id = public.current_user_company_id()
+  )
+);
+
+DROP POLICY IF EXISTS support_tickets_insert_company_or_superadmin ON public.support_tickets;
+CREATE POLICY support_tickets_insert_company_or_superadmin ON public.support_tickets
+FOR INSERT
+WITH CHECK (
+  auth.uid() IS NOT NULL
+  AND (
+    public.is_superadmin()
+    OR (
+      created_by = auth.uid()
+      AND company_id = public.current_user_company_id()
+    )
+  )
+);
+
+DROP POLICY IF EXISTS support_tickets_update_company_or_superadmin ON public.support_tickets;
+CREATE POLICY support_tickets_update_company_or_superadmin ON public.support_tickets
+FOR UPDATE
+USING (
+  auth.uid() IS NOT NULL
+  AND (
+    public.is_superadmin()
+    OR company_id = public.current_user_company_id()
+  )
+)
+WITH CHECK (
+  auth.uid() IS NOT NULL
+  AND (
+    public.is_superadmin()
+    OR company_id = public.current_user_company_id()
+  )
+);
+
+DROP POLICY IF EXISTS support_tickets_delete_superadmin_only ON public.support_tickets;
+CREATE POLICY support_tickets_delete_superadmin_only ON public.support_tickets
+FOR DELETE
+USING (auth.uid() IS NOT NULL AND public.is_superadmin());
+
+DROP POLICY IF EXISTS support_ticket_messages_select_company_or_superadmin ON public.support_ticket_messages;
+CREATE POLICY support_ticket_messages_select_company_or_superadmin ON public.support_ticket_messages
+FOR SELECT
+USING (
+  auth.uid() IS NOT NULL
+  AND (
+    public.is_superadmin()
+    OR EXISTS (
+      SELECT 1
+      FROM public.support_tickets t
+      WHERE t.id = ticket_id
+        AND t.company_id = public.current_user_company_id()
+    )
+  )
+);
+
+DROP POLICY IF EXISTS support_ticket_messages_insert_company_or_superadmin ON public.support_ticket_messages;
+CREATE POLICY support_ticket_messages_insert_company_or_superadmin ON public.support_ticket_messages
+FOR INSERT
+WITH CHECK (
+  auth.uid() IS NOT NULL
+  AND (
+    public.is_superadmin()
+    OR (
+      author_user_id = auth.uid()
+      AND EXISTS (
+        SELECT 1
+        FROM public.support_tickets t
+        WHERE t.id = ticket_id
+          AND t.company_id = public.current_user_company_id()
+      )
+    )
+  )
+);
 
 -- 9) Bootstrap known superadmin account (if auth user exists).
 INSERT INTO public.profiles (id, email, role, company_id)

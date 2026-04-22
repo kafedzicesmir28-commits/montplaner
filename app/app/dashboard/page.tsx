@@ -10,6 +10,7 @@ import {
   CalendarDays,
   DollarSign,
   FileSpreadsheet,
+  Settings,
   Store,
   Umbrella,
   Users,
@@ -124,6 +125,16 @@ const secondaryCards: DashboardCard[] = [
     icon: FileSpreadsheet,
     iconColor: 'text-yellow-700',
     iconBg: 'bg-yellow-100',
+  },
+  {
+    href: '/dashboard/settings',
+    title: 'Einstellungen',
+    description: 'Profil, Passwort und Support-Tickets.',
+    accent: 'from-rose-50 to-rose-100/80 border-rose-200',
+    dot: 'bg-rose-500',
+    icon: Settings,
+    iconColor: 'text-rose-700',
+    iconBg: 'bg-rose-100',
   },
 ];
 

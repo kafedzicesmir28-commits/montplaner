@@ -56,6 +56,7 @@ export default function Layout({
     { href: '/montatsplaner', label: t.monthlyPlanner },
     { href: '/vacations', label: t.vacations },
     { href: '/accountant', label: t.accountantView },
+    { href: '/dashboard/settings', label: 'Einstellungen' },
   ];
 
   const superadminNavItems = [{ href: '/admin', label: 'Admin' }];

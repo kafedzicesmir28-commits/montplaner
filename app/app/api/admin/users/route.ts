@@ -76,3 +76,62 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { admin, userId: actorUserId, email: actorEmail } = await requireSuperadmin(request);
+    const body = (await request.json()) as { id?: string; confirm_text?: string };
+    const userId = (body.id ?? '').trim();
+    const confirmText = (body.confirm_text ?? '').trim();
+    if (!userId || !confirmText) {
+      return NextResponse.json({ error: 'id and confirm_text are required' }, { status: 400 });
+    }
+    if (userId === actorUserId) {
+      return NextResponse.json({ error: 'You cannot delete your own superadmin account' }, { status: 400 });
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from('profiles')
+      .select('id,email,role,company_id')
+      .eq('id', userId)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
+    }
+
+    const expectedConfirmation = (profile.email ?? profile.id).trim();
+    if (confirmText !== expectedConfirmation) {
+      return NextResponse.json(
+        { error: 'Confirmation text must match the exact user email' },
+        { status: 400 }
+      );
+    }
+
+    const { error: profileDeleteError } = await admin.from('profiles').delete().eq('id', userId);
+    if (profileDeleteError) throw profileDeleteError;
+
+    const { error: authDeleteError } = await admin.auth.admin.deleteUser(userId);
+    if (authDeleteError) throw authDeleteError;
+
+    await writeAuditEvent(admin, {
+      action: 'user_deleted',
+      actor_user_id: actorUserId,
+      actor_email: actorEmail,
+      target_user_id: userId,
+      company_id: profile.company_id,
+      target_type: 'user',
+      target_id: userId,
+      target_email: profile.email,
+      metadata: { role: profile.role },
+      ip: getRequestIp(request),
+      user_agent: request.headers.get('user-agent'),
+    });
+
+    return NextResponse.json({ ok: true, deleted_user_id: userId });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to delete user';
+    const status = message === 'Forbidden' ? 403 : message.includes('token') ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
