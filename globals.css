@@ -1,0 +1,217 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f9fb;
+  --surface: #ffffff;
+  --foreground: #111827;
+  --muted-foreground: #4b5563;
+  --border: #e5e7eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  background: #fff;
+  color: #111827;
+  border-color: #d1d5db;
+}
+
+button {
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+table {
+  background: #fff;
+}
+
+/* /vacations Ferienplan: consecutive vacation weeks alternate (logic in page, not row index). */
+.vacation-red {
+  background-color: rgb(248 113 113 / 0.8);
+  color: #fff;
+}
+
+.vacation-orange {
+  background-color: #ffa94d;
+  color: #fff;
+}
+
+img,
+table {
+  max-width: 100%;
+}
+
+th,
+td {
+  border-color: #e5e7eb;
+}
+
+.rounded-lg {
+  border-radius: 8px;
+}
+
+.shadow,
+.shadow-sm,
+.shadow-md {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Planner (/planner): tabular alignment for hour/total/break numbers (sizes set in components). */
+.planner-cell-hours,
+.planner-cell-numeric,
+.planner-header-daynum,
+.planner-pos-input-num {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100%;
+    height: auto;
+    background: #fff !important;
+  }
+
+  body {
+    color: #111 !important;
+  }
+
+  .vacation-red {
+    background-color: #ef4444 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .vacation-orange {
+    background-color: #f97316 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .planner-print-area {
+    page: planner-landscape;
+    max-width: 100%;
+  }
+
+  .planner-print-area,
+  .planner-print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .planner-print-area {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Planner numerics in print — large for readability (overrides small table font-size). */
+  .planner-cell-hours {
+    font-size: clamp(17px, 3.35mm, 26px) !important;
+    line-height: 1.12 !important;
+  }
+
+  .planner-cell-numeric,
+  .planner-header-daynum,
+  .planner-pos-input-num {
+    font-size: clamp(16px, 3.05mm, 23px) !important;
+    line-height: 1.12 !important;
+  }
+
+  /* Named pages: default for ad-hoc prints; planner stays landscape; Monatsplaner uses portrait A4 (see module). */
+  @page {
+    margin: 8mm;
+  }
+
+  @page planner-landscape {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  @page montatsplaner-a4 {
+    size: A4;
+    margin: 0;
+  }
+
+  #monthsplanner-print-area,
+  #monthsplanner-print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #monthsplanner-print-area table {
+    max-width: none !important;
+  }
+}
+
+/* Monthly planner (/montatsplaner) — full viewport width under nav (Layout sets main; this reinforces). */
+.planner-fullwidth {
+  display: block;
+  width: 100%;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+}
+
+.planner-fullwidth > div.min-h-screen > main {
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+@media (max-width: 1023.98px) {
+  body {
+    font-size: 95%;
+  }
+
+  button,
+  a,
+  select,
+  input,
+  textarea {
+    min-height: 40px;
+  }
+
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+}
