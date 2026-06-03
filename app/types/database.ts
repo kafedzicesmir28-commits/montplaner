@@ -43,6 +43,10 @@ export interface ShiftAssignment {
   shift_id: string | null;
   store_id: string | null;
   assignment_type?: 'SHIFT' | 'FREI' | 'KRANK' | 'FERIEN';
+  /** Per-day start override (HH:mm or DB time). Null = use linked shift.start_time. */
+  custom_start_time?: string | null;
+  /** Per-day end override (HH:mm or DB time). Null = use linked shift.end_time. */
+  custom_end_time?: string | null;
   /** Per-day break override (minutes). Null = use linked shift.break_minutes. */
   custom_break_minutes?: number | null;
 }

@@ -13,7 +13,7 @@ import {
   snapToPlannerBreakMinutes,
   upsertQuickPlannerShift,
 } from '@/lib/plannerShiftQuickAssign';
-import { sortedShiftAssignments } from '@/lib/plannerDayAssignments';
+import { sortedShiftAssignments, type DayAssignmentRow } from '@/lib/plannerDayAssignments';
 import {
   logisticsDisplayForStore,
   logisticsOverlayForCell,
@@ -23,10 +23,12 @@ import { LogisticsMarkerCorner } from '@/components/LogisticsMarkers';
 import { t } from '@/lib/translations';
 import { getStoreColor } from '@/lib/storeColors';
 
-export type PlannerAssignment = ShiftAssignment & {
-  custom_start_time?: string | null;
-  custom_end_time?: string | null;
-};
+/** Full row from API; used by PlannerGrid and exports. */
+export type PlannerAssignment = ShiftAssignment;
+
+/** Fields required for a single cell editor/display (grid often passes a day slice). */
+export type PlannerCellAssignment = DayAssignmentRow &
+  Pick<ShiftAssignment, 'custom_break_minutes'>;
 
 type StoreForPlanner = Pick<
   Store,
@@ -93,7 +95,7 @@ function formatClock(value: string): string {
   return `${part[0]!.padStart(2, '0')}:${part[1]!.padStart(2, '0')}`;
 }
 
-function workingRange(assignment: PlannerAssignment | undefined, shift: Shift | undefined): string | null {
+function workingRange(assignment: PlannerCellAssignment | undefined, shift: Shift | undefined): string | null {
   if (!shift) return null;
   const customStart = assignment?.custom_start_time;
   const customEnd = assignment?.custom_end_time;
@@ -145,7 +147,7 @@ export type PlannerCellProps = {
   dateStr: string;
   isVacation: boolean;
   vacationLabel: string;
-  assignment: PlannerAssignment | undefined;
+  assignment: PlannerCellAssignment | undefined;
   store: StoreForPlanner | undefined;
   shift: Shift | undefined;
   shifts: Shift[];
@@ -176,12 +178,7 @@ export type PlannerCellProps = {
   /** Clears grid editing state after delete (avoids stuck editor on empty cell). */
   onCloseCellEdit?: () => void;
   isBirthday?: boolean;
-  dayAssignments?: Array<
-    Pick<
-      ShiftAssignment,
-      'id' | 'shift_id' | 'assignment_type' | 'custom_start_time' | 'custom_end_time'
-    >
-  >;
+  dayAssignments?: DayAssignmentRow[];
 };
 
 export default function PlannerCell({
