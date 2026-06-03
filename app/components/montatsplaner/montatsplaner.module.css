@@ -1,0 +1,458 @@
+/* Montatsplaner — spreadsheet-only styling (light theme, no shadows/cards) */
+
+.root {
+  --year-col-w: 92px;
+  --month-col-w: 100px;
+  --label-col-w: 112px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  color: #222;
+  overflow: hidden;
+  max-height: calc(100vh - 80px);
+  max-height: calc(100dvh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+
+.topScroll {
+  box-sizing: border-box;
+  width: 100%;
+  flex: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  border: 1px solid #cfd6de;
+  border-bottom: none;
+  border-left: none;
+  border-right: none;
+  background: #f8fafc;
+  min-height: 12px;
+}
+
+.bottomScroll {
+  box-sizing: border-box;
+  width: 100%;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  position: relative;
+}
+
+.table {
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #cfd6de;
+  border-left: none;
+  border-right: none;
+}
+
+.cell {
+  border: 1px solid #cfd6de;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+.headerCell {
+  background: #dfe6ee;
+  font-weight: 600;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.headerYear {
+  width: var(--year-col-w);
+  min-width: var(--year-col-w);
+  height: 40px;
+  text-align: center;
+  vertical-align: middle;
+  left: 0;
+  z-index: 13;
+}
+
+.headerLabelSpacer {
+  width: var(--label-col-w);
+  min-width: var(--label-col-w);
+  height: 64px;
+  position: sticky;
+  left: var(--year-col-w);
+  z-index: 13;
+}
+
+.headerEmployee {
+  min-width: max(80px, var(--month-col-w));
+  width: auto;
+  height: 64px;
+  padding: 4px 8px;
+  vertical-align: middle;
+  text-align: center;
+  position: sticky;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.headerEmployeeInner {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.monthCell {
+  width: var(--year-col-w);
+  min-width: var(--year-col-w);
+  background: #ffffff;
+  padding: 4px 4px;
+  vertical-align: middle;
+  text-align: center;
+  position: sticky;
+  left: 0;
+  z-index: 8;
+}
+
+.monthLabel {
+  display: block;
+  writing-mode: horizontal-tb;
+  transform: none;
+  font-weight: 600;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  padding: 4px 2px;
+  text-align: center;
+  white-space: normal;
+}
+
+.labelCell {
+  width: var(--label-col-w);
+  min-width: var(--label-col-w);
+  text-align: left;
+  font-weight: normal;
+  padding-left: 8px;
+  position: sticky;
+  left: var(--year-col-w);
+  z-index: 8;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.rowGeleistete {
+  height: 32px;
+}
+
+.rowGeleistete td:not(.monthCell) {
+  background: #dfeedd;
+}
+
+.rowSecondary {
+  height: 28px;
+}
+
+.rowSecondary td:not(.monthCell) {
+  background: #e6edf7;
+}
+
+.rowBemerkung {
+  height: 30px;
+}
+
+.rowBemerkung td:not(.monthCell) {
+  background: #f4d6d6;
+}
+
+.dataCell {
+  min-width: max(80px, var(--month-col-w));
+  min-height: 0;
+  width: auto;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: visible;
+  font-size: 0.85rem;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.cellInput {
+  width: 100%;
+  height: 100%;
+  min-height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.cellInputText {
+  text-align: left;
+  padding-left: 2px;
+}
+
+.bemerkungCell {
+  text-align: left;
+  padding-left: 6px;
+  font-weight: normal;
+  min-width: 220px;
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.totalMonthCell {
+  font-weight: 600;
+  text-align: left;
+  padding-left: 8px;
+  background: #ffffff;
+}
+
+.printOuter {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+/* --- Screen: outer scroll width; print: exact A4 sheet (see @media print) --- */
+.printPageRoot {
+  display: block;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.printViewport {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.printScaleSlot {
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.printScaleLayer {
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  transform-origin: 0 0;
+}
+
+@media (max-width: 1023.98px) {
+  .root {
+    font-size: 11px;
+  }
+
+  .cellInput {
+    min-height: 40px;
+  }
+
+  .rowGeleistete,
+  .rowSecondary,
+  .rowBemerkung {
+    height: auto;
+  }
+}
+
+@media print {
+  /* One physical A4 sheet; @page montatsplaner-a4 is defined in globals.css */
+  .printOuter {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .printPageRoot {
+    page: montatsplaner-a4;
+    display: block !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* ~7mm inner margin (within requested 5–10mm); content box for scaling */
+  .printViewport {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 7mm !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+  }
+
+  .printScaleSlot {
+    display: block !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .printScaleLayer {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    transform-origin: 0 0 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .root {
+    display: block !important;
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    flex: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 8.5pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .topScroll {
+    display: none !important;
+  }
+
+  .bottomScroll {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    flex: none !important;
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .table {
+    table-layout: fixed !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    border-collapse: collapse !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .table thead,
+  .table tbody,
+  .table tfoot,
+  .table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .cell {
+    overflow: visible !important;
+  }
+
+  .headerCell,
+  .headerYear,
+  .headerLabelSpacer,
+  .headerEmployee,
+  .monthCell,
+  .labelCell {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+  }
+
+  .headerYear {
+    font-size: 10pt !important;
+  }
+
+  .headerEmployeeInner {
+    font-size: 8pt !important;
+  }
+
+  .monthLabel {
+    font-size: 8pt !important;
+  }
+
+  .labelCell {
+    font-size: 8.5pt !important;
+  }
+
+  .dataCell {
+    font-size: 8pt !important;
+  }
+
+  .cellInput {
+    font-size: inherit !important;
+  }
+}
+
+/* PDF capture only — keeps previous row/cell heights in exports (html2canvas). */
+.pdfExportCapture .headerLabelSpacer,
+.pdfExportCapture .headerEmployee {
+  height: 80px;
+}
+
+.pdfExportCapture .rowGeleistete {
+  height: 44px;
+}
+
+.pdfExportCapture .rowSecondary {
+  height: 40px;
+}
+
+.pdfExportCapture .rowBemerkung {
+  height: 42px;
+}
+
+.pdfExportCapture .dataCell {
+  min-height: 36px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.pdfExportCapture .cellInput {
+  min-height: 32px;
+  padding: 2px 0;
+}
